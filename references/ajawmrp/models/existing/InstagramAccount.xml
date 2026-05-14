@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<domain-models xmlns="http://axelor.com/xml/ns/domain-models"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://axelor.com/xml/ns/domain-models
+    http://axelor.com/xml/ns/domain-models/domain-models_6.1.xsd">
+
+  <module package="com.ajawmrp3.apps.prospectingai.db" name="prospectingai"/>
+
+  <!-- Chatwoot API Channel linkage fields are published in AJAWMRP. -->
+  <entity name="InstagramAccount">
+    <string name="instagramUserId" title="Instagram Id" required="true" unique="true"/>
+    <string name="username" title="User Name"/>
+    <string name="accountType" title="Account Type"/>
+    <string name="name" title="Name"/>
+    <string name="profilePictureUrl" title="Profile Picture Url"/>
+
+    <string name="accessToken" title="Access Token" large="true"/>
+    <string name="refreshToken"  title="Refresh Token" large="true"/>
+    <datetime name="tokenExpiresAt" title="Token Expires At" />
+
+    <boolean name="active" title="Active"/>
+    <datetime name="connectedAt" title="Connected At" />
+
+    <many-to-one name="agent"
+      ref="com.ajawmrp3.apps.prospectingai.db.Agent"
+      required="true"
+      title="Agent"/>
+
+    <string name="instagramState" title="Instagram State"/>
+
+    <!-- Chatwoot API Channel linkage -->
+    <integer name="chatwootAccountId" title="Chatwoot Account ID"/>
+    <integer name="chatwootInboxId" title="Chatwoot Inbox ID"/>
+    <integer name="chatwootChannelId" title="Chatwoot Channel ID"/>
+    <string name="chatwootChannelType" title="Chatwoot Channel Type"/>
+    <string name="chatwootInboxName" title="Chatwoot Inbox Name"/>
+    <string name="chatwootInboxIdentifier" title="Chatwoot Inbox Identifier"/>
+    <string name="chatwootWebhookUrl" title="Chatwoot Webhook URL" large="true"/>
+
+    <!-- Sensitive: persist only if needed to validate Chatwoot API Channel callbacks. Do not expose in views/logs. -->
+    <string name="chatwootHmacToken" title="Chatwoot HMAC Token" large="true"/>
+
+    <!-- Integration lifecycle: pending, active, failed, schema_gap -->
+    <string name="chatwootIntegrationStatus" title="Chatwoot Integration Status"/>
+    <datetime name="chatwootLastSyncAt" title="Chatwoot Last Sync At"/>
+    <string name="chatwootLastIntegrationError" title="Chatwoot Last Integration Error" large="true"/>
+  </entity>
+
+</domain-models>

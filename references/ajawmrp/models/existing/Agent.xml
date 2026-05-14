@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<domain-models xmlns="http://axelor.com/xml/ns/domain-models"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://axelor.com/xml/ns/domain-models http://axelor.com/xml/ns/domain-models/domain-models_6.1.xsd">
+
+  <module package="com.ajawmrp3.apps.prospectingai.db" name="prospectingai"/>
+
+  <entity name="Agent">
+
+    <many-to-one name="companyData" ref="com.ajawmrp3.apps.prospectingai.db.CompanyData"
+      title="Company" required="true"/>
+
+    <string name="name" title="Name" required="true"/>
+    <enum name="agentType" ref="AgentType" title="Agent type" required="true"/>
+    <enum name="agentDirection" ref="AgentDirection" title="Agent direction" required="true"/>
+    <string name="language" title="Language" required="true"/>
+    <string name="agentSystemName" title="Agent system name" required="true"/>
+
+    <string name="purpose" title="Purpose" large="true" multiline="true" required="true"/>
+
+    <string name="description" title="Description" large="true" multiline="true"/>
+
+    <string name="instructions" title="Instructions" large="true" multiline="true"/>
+
+    <string name="prompt" title="Prompt" large="true" multiline="true" required="true"/>
+
+    <string name="voice" title="Voice"/>
+
+    <string name="openingLine" title="Opening line" large="true" multiline="true"/>
+
+    <string name="voicemailMessage" title="Voicemail Message" large="true" multiline="true"/>
+
+    <string name="statusSelect" title="Status" selection="AgentStatus"/>
+
+    <boolean name="processed" title="Processed"/>
+
+    <!-- only for text bots -->
+    <string name="whatsappNumber" title="Whatsapp Number"/>
+
+    <!-- N8N TextBots Creators Vars -->
+    <string name="evoapiName" title="EvoAPI Name" hidden="true"/>
+    <string name="evoapiKey" title="EvoAPI Key" hidden="true"/>
+    <string name="workflowId" title="Workflow Id" hidden="true"/>
+    <string name="chatwootApiKey" title="Chatwoot API Key" hidden="true"/>
+    <!-- Cal.com appointment fields -->
+    <string name="calToken" title="Cal.com Access Token"/>
+    <string name="calEventType" title="Cal.com Event type Id"/>
+
+    <!-- only for voice bots -->
+    <many-to-one name="companyPhoneNumber"
+      ref="com.ajawmrp3.apps.prospectingai.db.CompanyPhoneNumber" title="Company"/>
+
+    <!-- N8N VoiceBots Creator Vars -->
+    <string name="vapiApiKey" title="Vapi Api Key" hidden="true"/>
+    <string name="vapiAssitantId" title="Vapi Assitant Id" hidden="true"/>
+    <string name="elevenLabsVoiceId" title="Eleven Labs Voice Id" hidden="true"/>
+    <string name="vapiPhoneNumberId" title="Vapi Phone Number Id" hidden="true"/>
+    
+    <!-- google oauth 2.0 -->
+    <one-to-many name="calendarIntegrationList"
+	  title="Calendars"
+	  ref="com.ajawmrp3.apps.prospectingai.db.CalendarIntegration"
+	  mappedBy="agent"/>
+	  
+	<string name="timeZone" title="Time Zone"/>
+
+  </entity>
+
+  <enum name="AgentStatus">
+    <item name="DRAFT" title="Draft"/>
+    <item name="CREATED" title="Created"/>
+  </enum>
+
+  <enum name="AgentType">
+    <item name="VOICE" title="Voz"/>
+    <item name="TEXT" title="Text"/>
+    <item name="SMS" title="SMS"/>
+  </enum>
+
+  <enum name="AgentDirection">
+    <item name="INBOUND" title="Inbound"/>
+    <item name="OUTBOUND" title="Outbound"/>
+  </enum>
+
+</domain-models>

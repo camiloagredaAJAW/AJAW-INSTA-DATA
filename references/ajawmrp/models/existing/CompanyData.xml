@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<domain-models xmlns="http://axelor.com/xml/ns/domain-models"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://axelor.com/xml/ns/domain-models http://axelor.com/xml/ns/domain-models/domain-models_6.1.xsd">
+
+  <module package="com.ajawmrp3.apps.prospectingai.db" name="prospectingai"/>
+
+  <entity name="CompanyData">
+  	
+  	<string name="companyRegistrationNumber" title="Company Registration Number" />
+  	
+    <string name="name" title="Company Name" required="true"/>
+    
+    <string name="businessRegistrationName" title="Business Registration Name" />
+    
+    <enum name="businessType" title="Business Type" ref="BusinessType" default="BUSINESS" />
+    
+    <string name="companyStatus" title="Status" selection="CompanyStatus" default="NO_PLAN"/>
+    <many-to-one name="activeSubscription"
+      ref="com.ajawmrp3.apps.prospectingai.db.Subscription" title="Active Subscription"/>
+
+    <integer name="credits" title="Available Credits" default="0"
+      help="Current pool of
+      unallocated credits for the company."/>
+
+    <string name="creditDistributionMode" title="Credit Distribution Mode"
+      selection="CreditDistributionMode" default="MANUAL"/>
+
+    <integer name="minCreditsGuaranteed" title="Minimum Credits Guaranteed per User"
+      help="Minimum credits this user will receive if available. Used in Rule-Based distribution."/>
+
+    <one-to-many name="companyMembers"
+      ref="com.ajawmrp3.apps.prospectingai.db.CompanyMember" mappedBy="companyData" title="Members"/>
+
+    <one-to-many name="subscriptions"
+      ref="com.ajawmrp3.apps.prospectingai.db.Subscription" mappedBy="companyData"
+      title="All Subscriptions"/>
+      
+     <many-to-one name="country" ref="com.axelor.apps.base.db.Country"
+      title="Country"/>
+     <many-to-one name="city" ref="com.axelor.apps.base.db.City"
+      title="City"/>
+     <many-to-one name="region" ref="com.axelor.apps.base.db.Region"
+      title="Region"/>
+     <string name="zip" title="Zip code"/>
+      
+     <string name="address" title="Address"/>
+     
+     <!-- only for N8N VoiceBots Creator Vars -->
+     <string name="twilioAddressSid" title="Twilio Address Id" hidden="true" />
+     
+     <one-to-many name="companyDataFileList" title="Files"
+      ref="com.ajawmrp3.apps.prospectingai.db.CompanyDataFile" mappedBy="companyData"/>
+     
+     <string name="twilioEndUserSid" title="Twilio End User Id" hidden="true" />
+     <string name="twilioBundleSid" title="Twilio Regulatory Bundle Id" hidden="true" />
+     
+     <one-to-many name="companyPhoneNumberList" title="Phone Numbers"
+      ref="com.ajawmrp3.apps.prospectingai.db.CompanyPhoneNumber" mappedBy="companyData"/>
+      
+      <string name="twilioBundleStatus" title="Regulatory Compilance Status" />
+      
+  </entity>
+
+  <enum name="CompanyStatus">
+    <item name="ACTIVE" title="Active"/>
+    <item name="OVER_LIMIT" title="Over User Limit"/>
+    <item name="SUSPENDED" title="Suspended"/>
+    <item name="NO_PLAN" title="No active plan"/>
+  </enum>
+
+  <enum name="CreditDistributionMode">
+    <item name="MANUAL" title="Manual Distribution"/>
+    <item name="AUTO_EQUITABLE" title="Automatic - Equitable"/>
+    <item name="AUTO_RULE_BASED" title="Automatic - Rule-Based"/>
+  </enum>
+  
+  <enum name="BusinessType">
+    <item name="INDIVIDUAL" title="Individual"/>
+    <item name="BUSINESS" title="Business"/>
+  </enum>
+
+</domain-models>
