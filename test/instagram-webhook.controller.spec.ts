@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
+import { InstagramBusinessLoginService } from '../src/application/instagramBusinessLogin';
 import { InstagramWebhookRoutingService } from '../src/application/instagramWebhookRouting';
 import { validateEnvironment } from '../src/config/environment';
 import { InstagramWebhookController } from '../src/http/routes/instagram-webhook.controller';
@@ -10,10 +11,20 @@ import { applyTestEnvironment } from './test-env';
 
 describe('InstagramWebhookController', () => {
   let app: INestApplication;
+  let loginService: { completeCallback: jest.Mock };
   let routingService: { route: jest.Mock };
 
   beforeEach(async () => {
     applyTestEnvironment();
+    loginService = {
+      completeCallback: jest.fn().mockResolvedValue({
+        status: 'connected',
+        instagramAccountId: 11,
+        instagramUserId: '17841400000000000',
+        tokenSource: 'short_lived',
+        longLivedTokenExchange: { attempted: false, succeeded: false },
+      }),
+    };
     routingService = {
       route: jest.fn().mockResolvedValue({ status: 'processed', processed: [], ignored: [], failures: [] }),
     };
@@ -26,7 +37,10 @@ describe('InstagramWebhookController', () => {
         }),
       ],
       controllers: [InstagramWebhookController],
-      providers: [{ provide: InstagramWebhookRoutingService, useValue: routingService }],
+      providers: [
+        { provide: InstagramBusinessLoginService, useValue: loginService },
+        { provide: InstagramWebhookRoutingService, useValue: routingService },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication({ rawBody: true });
@@ -77,6 +91,27 @@ describe('InstagramWebhookController', () => {
         'hub.challenge': 'challenge-123',
       })
       .expect(401);
+  });
+
+  it('routes OAuth callback GET requests through the login service without running verification', async () => {
+    await request(app.getHttpServer())
+      .get('/integrations/instagram/webhook')
+      .query({ code: 'code-123', state: 'state-123' })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({ status: 'connected', instagramAccountId: 11, tokenSource: 'short_lived' });
+        expect(JSON.stringify(body)).not.toContain('token-secret');
+      });
+
+    expect(loginService.completeCallback).toHaveBeenCalledWith({ code: 'code-123', state: 'state-123' });
+    expect(routingService.route).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid GET requests that are neither verification nor OAuth callback', async () => {
+    await request(app.getHttpServer()).get('/integrations/instagram/webhook').query({ code: 'code-without-state' }).expect(400);
+
+    expect(loginService.completeCallback).not.toHaveBeenCalled();
+    expect(routingService.route).not.toHaveBeenCalled();
   });
 
   it('delegates a POST request with a valid Meta signature to the routing service', async () => {
