@@ -110,7 +110,58 @@ describe('DefaultChatwootClient', () => {
     await expect(client.getProfile('secret-token')).rejects.toThrow('account_id');
     await expect(client.getProfile('secret-token')).rejects.not.toThrow('secret-token');
   });
+
+  it('creates contact, contact_inbox, conversation, and incoming message with deterministic source ids', async () => {
+    const fetcher = jest
+      .fn<ReturnType<FetchLike>, Parameters<FetchLike>>()
+      .mockResolvedValueOnce(response({ body: { payload: { id: 10, identifier: 'instagram:user:sender-1' } } }))
+      .mockResolvedValueOnce(response({ body: { id: 20, source_id: 'ig:account-1:user:sender-1' } }))
+      .mockResolvedValueOnce(response({ body: { id: 30, source_id: 'ig:dm:account-1:sender-1' } }))
+      .mockResolvedValueOnce(response({ body: { id: 40, source_id: 'ig:event:mid-1' } }));
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(
+      client.createContact(1, 'token', {
+        identifier: 'instagram:user:sender-1',
+        name: 'Instagram user sender-1',
+        additional_attributes: { instagram_sender_id: 'sender-1' },
+      }),
+    ).resolves.toEqual({ id: 10, identifier: 'instagram:user:sender-1', source_id: undefined });
+    await expect(client.createContactInbox(1, 'token', { contact_id: 10, inbox_id: 100, source_id: 'ig:account-1:user:sender-1' })).resolves.toEqual({
+      id: 20,
+      source_id: 'ig:account-1:user:sender-1',
+      identifier: undefined,
+    });
+    await expect(client.createConversation(1, 'token', { inbox_id: 100, contact_id: 10, source_id: 'ig:dm:account-1:sender-1' })).resolves.toEqual({
+      id: 30,
+      source_id: 'ig:dm:account-1:sender-1',
+      identifier: undefined,
+    });
+    await expect(client.createIncomingMessage(1, 'token', 30, { content: 'Hello', source_id: 'ig:event:mid-1' })).resolves.toEqual({
+      id: 40,
+      source_id: 'ig:event:mid-1',
+      identifier: undefined,
+    });
+
+    expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
+      'https://chatwoot.test/api/v1/accounts/1/contacts',
+      'https://chatwoot.test/api/v1/accounts/1/contact_inboxes',
+      'https://chatwoot.test/api/v1/accounts/1/conversations',
+      'https://chatwoot.test/api/v1/accounts/1/conversations/30/messages',
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[3][1]?.body))).toEqual({ content: 'Hello', source_id: 'ig:event:mid-1', message_type: 'incoming' });
+  });
 });
+
+function response({ ok = true, status = 200, body = {} }: { ok?: boolean; status?: number; body?: unknown }) {
+  return {
+    ok,
+    status,
+    headers: { get: () => null },
+    json: async () => body,
+    text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+  };
+}
 
 function configService(): ConfigService<EnvironmentConfig, true> {
   return {

@@ -3,15 +3,20 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
+import { InstagramWebhookRoutingService } from '../src/application/instagramWebhookRouting';
 import { validateEnvironment } from '../src/config/environment';
 import { InstagramWebhookController } from '../src/http/routes/instagram-webhook.controller';
 import { applyTestEnvironment } from './test-env';
 
 describe('InstagramWebhookController', () => {
   let app: INestApplication;
+  let routingService: { route: jest.Mock };
 
   beforeEach(async () => {
     applyTestEnvironment();
+    routingService = {
+      route: jest.fn().mockResolvedValue({ status: 'processed', processed: [], ignored: [], failures: [] }),
+    };
 
     const moduleRef = await Test.createTestingModule({
       imports: [
@@ -21,6 +26,7 @@ describe('InstagramWebhookController', () => {
         }),
       ],
       controllers: [InstagramWebhookController],
+      providers: [{ provide: InstagramWebhookRoutingService, useValue: routingService }],
     }).compile();
 
     app = moduleRef.createNestApplication({ rawBody: true });
@@ -73,7 +79,7 @@ describe('InstagramWebhookController', () => {
       .expect(401);
   });
 
-  it('accepts a POST request with a valid Meta signature', async () => {
+  it('delegates a POST request with a valid Meta signature to the routing service', async () => {
     const payload = JSON.stringify({ object: 'instagram', entry: [] });
     const signature = sign(payload);
 
@@ -83,7 +89,9 @@ describe('InstagramWebhookController', () => {
       .set('X-Hub-Signature-256', signature)
       .send(payload)
       .expect(200)
-      .expect({ status: 'ok' });
+      .expect({ status: 'processed', processed: [], ignored: [], failures: [] });
+
+    expect(routingService.route).toHaveBeenCalledWith({ payload: { object: 'instagram', entry: [] } });
   });
 
   it('rejects POST requests with missing or invalid Meta signatures', async () => {
@@ -104,6 +112,8 @@ describe('InstagramWebhookController', () => {
       .set('X-Hub-Signature-256', sign(JSON.stringify({ tampered: true })))
       .send(payload)
       .expect(401);
+
+    expect(routingService.route).not.toHaveBeenCalled();
   });
 });
 
