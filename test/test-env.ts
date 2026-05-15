@@ -10,5 +10,7 @@ export function applyTestEnvironment(): void {
   process.env.MODEL_NAME_AGENT = 'Agent';
   process.env.MODEL_NAME_INSTAGRAM_ACCOUNT = 'InstagramAccount';
   process.env.INTERNAL_API_KEY = 'test-internal-key';
+  process.env.META_APP_SECRET = 'test-meta-app-secret';
+  process.env.META_WEBHOOK_VERIFY_TOKEN = 'test-webhook-verify-token';
   process.env.LOG_LEVEL = 'info';
 }

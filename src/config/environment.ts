@@ -14,6 +14,7 @@ export interface EnvironmentConfig {
   CHATWOOT_MAIN_API_ACCESS_TOKEN?: string;
   META_APP_ID?: string;
   META_APP_SECRET?: string;
+  META_WEBHOOK_VERIFY_TOKEN?: string;
   INSTAGRAM_BUSINESS_ACCOUNT_ID?: string;
   INSTAGRAM_ACCESS_TOKEN?: string;
   AJAW_NAMESPACE: string;
@@ -34,7 +35,16 @@ const environmentSchema = Joi.object<EnvironmentConfig>({
   CHATWOOT_MAIN_ACCOUNT_ID: Joi.string().allow('').optional(),
   CHATWOOT_MAIN_API_ACCESS_TOKEN: Joi.string().allow('').optional(),
   META_APP_ID: Joi.string().allow('').optional(),
-  META_APP_SECRET: Joi.string().allow('').optional(),
+  META_APP_SECRET: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().min(1).required(),
+    otherwise: Joi.string().allow('').optional(),
+  }),
+  META_WEBHOOK_VERIFY_TOKEN: Joi.when('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().min(1).required(),
+    otherwise: Joi.string().allow('').optional(),
+  }),
   INSTAGRAM_BUSINESS_ACCOUNT_ID: Joi.string().allow('').optional(),
   INSTAGRAM_ACCESS_TOKEN: Joi.string().allow('').optional(),
   AJAW_NAMESPACE: Joi.string().min(1).required(),

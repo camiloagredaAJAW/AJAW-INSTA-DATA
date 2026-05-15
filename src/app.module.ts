@@ -4,6 +4,7 @@ import { ApplicationModule } from './application/application.module';
 import { validateEnvironment } from './config/environment';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
+import { InstagramWebhookController } from './http/routes/instagram-webhook.controller';
 import { IntegrationsController } from './http/routes/integrations.controller';
 import { InfrastructureModule } from './infrastructure/infrastructure.module';
 
@@ -16,7 +17,7 @@ import { InfrastructureModule } from './infrastructure/infrastructure.module';
     ApplicationModule,
     InfrastructureModule,
   ],
-  controllers: [HealthController, IntegrationsController],
+  controllers: [HealthController, IntegrationsController, InstagramWebhookController],
   providers: [HealthService],
 })
 export class AppModule {}
