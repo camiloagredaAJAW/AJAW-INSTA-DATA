@@ -22,7 +22,11 @@ export interface AxelorInstagramAccountRecord {
   name?: string;
   username?: string;
   instagramUserId?: string;
+  instagramState?: string | null;
   accessToken?: string;
+  active?: boolean;
+  connectedAt?: string;
+  tokenExpiresAt?: string;
   scopes?: unknown;
   instagramScopes?: unknown;
   grantedScopes?: unknown;
@@ -53,7 +57,11 @@ export const DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS = [
   'name',
   'username',
   'instagramUserId',
+  'instagramState',
   'accessToken',
+  'active',
+  'connectedAt',
+  'tokenExpiresAt',
   'agent',
   'agent.chatwootApiKey',
   'chatwootAccountId',
@@ -216,6 +224,49 @@ export class DefaultAxelorClient {
     return parseAxelorList<AxelorInstagramAccountRecord>(await response.json())[0] ?? null;
   }
 
+  async findInstagramAccountByState(instagramState: string, options: AxelorSearchOptions = {}): Promise<AxelorInstagramAccountRecord | null> {
+    const config = this.readConfig();
+    const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/search`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...this.buildAuthenticatedRestHeaders(config),
+      },
+      body: JSON.stringify(buildInstagramAccountSearchByStatePayload(instagramState, options)),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Axelor InstagramAccount search failed with status ${response.status}`);
+    }
+
+    return parseAxelorList<AxelorInstagramAccountRecord>(await response.json())[0] ?? null;
+  }
+
+  async createInstagramAccount(agentId: string | number, instagramState: string): Promise<AxelorInstagramAccountRecord> {
+    const config = this.readConfig();
+    const response = await this.fetcher(modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...this.buildAuthenticatedRestHeaders(config),
+      },
+      body: JSON.stringify(buildCreateInstagramAccountOAuthPlaceholderPayload(agentId, instagramState)),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Axelor InstagramAccount create failed with status ${response.status}`);
+    }
+
+    const created = parseAxelorData<AxelorInstagramAccountRecord>(await response.json());
+    if (!created) {
+      throw new Error('Axelor InstagramAccount create returned no data');
+    }
+
+    return created;
+  }
+
   async updateInstagramAccount(id: string | number, version: number, data: Record<string, unknown>): Promise<AxelorInstagramAccountRecord> {
     const config = this.readConfig();
     const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/${id}`, {
@@ -238,6 +289,10 @@ export class DefaultAxelorClient {
     }
 
     return updated;
+  }
+
+  async updateInstagramAccountOAuthState(id: string | number, version: number, instagramState: string | null): Promise<AxelorInstagramAccountRecord> {
+    return this.updateInstagramAccount(id, version, buildInstagramAccountOAuthStateUpdate(instagramState));
   }
 
   async readInstagramAccount(id: string | number): Promise<AxelorInstagramAccountRecord | null> {
@@ -359,6 +414,51 @@ export function buildInstagramAccountSearchByInstagramUserIdPayload(instagramUse
       _domain: 'self.instagramUserId=:instagramUserId',
       _domainContext: { instagramUserId },
     },
+  };
+}
+
+export function buildInstagramAccountSearchByStatePayload(instagramState: string, options: AxelorSearchOptions = {}): Record<string, unknown> {
+  return {
+    offset: options.offset ?? 0,
+    limit: options.limit ?? 1,
+    fields: options.fields ?? DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS,
+    data: {
+      _domain: 'self.instagramState=:instagramState',
+      _domainContext: { instagramState },
+    },
+  };
+}
+
+export function buildCreateInstagramAccountOAuthPlaceholderPayload(agentId: string | number, instagramState: string): Record<string, unknown> {
+  return {
+    data: {
+      agent: { id: agentId },
+      instagramState,
+      active: false,
+    },
+  };
+}
+
+export function buildInstagramAccountOAuthStateUpdate(instagramState: string | null): Record<string, unknown> {
+  return {
+    instagramState,
+    active: false,
+  };
+}
+
+export function buildInstagramAccountConnectedUpdate(input: {
+  instagramUserId: string;
+  accessToken: string;
+  connectedAt: string;
+  tokenExpiresAt?: string;
+}): Record<string, unknown> {
+  return {
+    instagramState: null,
+    instagramUserId: input.instagramUserId,
+    accessToken: input.accessToken,
+    active: true,
+    connectedAt: input.connectedAt,
+    ...(input.tokenExpiresAt ? { tokenExpiresAt: input.tokenExpiresAt } : {}),
   };
 }
 

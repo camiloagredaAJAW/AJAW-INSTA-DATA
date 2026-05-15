@@ -12,9 +12,12 @@ export interface EnvironmentConfig {
   CHATWOOT_BASE_URL: string;
   CHATWOOT_MAIN_ACCOUNT_ID?: string;
   CHATWOOT_MAIN_API_ACCESS_TOKEN?: string;
+  APP_BASE_URL?: string;
   META_APP_ID?: string;
   META_APP_SECRET?: string;
   META_WEBHOOK_VERIFY_TOKEN?: string;
+  INSTAGRAM_OAUTH_REDIRECT_URI?: string;
+  INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: boolean;
   INSTAGRAM_BUSINESS_ACCOUNT_ID?: string;
   INSTAGRAM_ACCESS_TOKEN?: string;
   AJAW_NAMESPACE: string;
@@ -34,6 +37,7 @@ const environmentSchema = Joi.object<EnvironmentConfig>({
   CHATWOOT_BASE_URL: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
   CHATWOOT_MAIN_ACCOUNT_ID: Joi.string().allow('').optional(),
   CHATWOOT_MAIN_API_ACCESS_TOKEN: Joi.string().allow('').optional(),
+  APP_BASE_URL: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
   META_APP_ID: Joi.string().allow('').optional(),
   META_APP_SECRET: Joi.when('NODE_ENV', {
     is: 'production',
@@ -45,6 +49,8 @@ const environmentSchema = Joi.object<EnvironmentConfig>({
     then: Joi.string().min(1).required(),
     otherwise: Joi.string().allow('').optional(),
   }),
+  INSTAGRAM_OAUTH_REDIRECT_URI: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
+  INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: Joi.boolean().truthy('true').falsy('false').default(false),
   INSTAGRAM_BUSINESS_ACCOUNT_ID: Joi.string().allow('').optional(),
   INSTAGRAM_ACCESS_TOKEN: Joi.string().allow('').optional(),
   AJAW_NAMESPACE: Joi.string().min(1).required(),
@@ -65,5 +71,16 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     throw new Error(`Invalid environment configuration: ${details}`);
   }
 
-  return value;
+  return deriveEnvironment(value);
+}
+
+function deriveEnvironment(config: EnvironmentConfig): EnvironmentConfig {
+  if (config.INSTAGRAM_OAUTH_REDIRECT_URI || !config.APP_BASE_URL) {
+    return config;
+  }
+
+  return {
+    ...config,
+    INSTAGRAM_OAUTH_REDIRECT_URI: `${config.APP_BASE_URL.replace(/\/+$/, '')}/integrations/instagram/webhook`,
+  };
 }
