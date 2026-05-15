@@ -47,6 +47,13 @@ Optional foundation variables currently validated when present:
 - `INSTAGRAM_ACCESS_TOKEN`
 - `LOG_LEVEL`
 
+Instagram webhook routing requires these Meta values in every environment where the callback is enabled:
+
+- `META_APP_SECRET` — the Meta app secret used to validate `X-Hub-Signature-256` POST signatures.
+- `META_WEBHOOK_VERIFY_TOKEN` — an operator-chosen token that must match the token entered in Meta Developers during webhook verification.
+
+Do not commit real values. Keep production secrets in the deployment secret store, not in source control.
+
 ## Health
 
 `GET /health` returns a non-secret readiness response for runtime smoke tests.
@@ -62,6 +69,20 @@ Request body:
 ```
 
 The activation use case logs in to AJAWMRP, resolves the Agent and its InstagramAccount, then reuses or creates a Chatwoot API Channel inbox. It prefers the published `InstagramAccount.chatwootAccountId` when it is a positive ID; it calls Chatwoot profile only as a fallback when that stored account ID is missing or invalid and `Agent.chatwootApiKey` is available.
+
+## Instagram webhook setup in Meta Developers
+
+Configure the webhook from <https://developers.facebook.com/> for the same app that owns the Instagram integration:
+
+1. Add the **Webhooks** product to the Meta app.
+2. Use the callback URL exposed by this service: `https://<public-host>/integrations/instagram/webhook`.
+3. Enter the exact verify token stored in `META_WEBHOOK_VERIFY_TOKEN`; Meta calls the GET challenge flow and the service returns `hub.challenge` only when the token matches.
+4. Keep `META_APP_SECRET` configured in the runtime environment before enabling POST delivery. Incoming webhook POST requests are rejected unless `X-Hub-Signature-256` validates against the raw request body.
+5. Subscribe the Instagram object/events needed for messages and comments, and ensure the connected account has the required scopes: `instagram_business_basic`, `instagram_business_manage_messages`, and `instagram_manage_comments`.
+
+The webhook router resolves the target `InstagramAccount` by `instagramUserId`, then uses its existing Chatwoot API Channel linkage (`chatwootAccountId`, `chatwootInboxId`, and `Agent.chatwootApiKey`) to create Chatwoot contacts, contact inboxes, conversations, and incoming messages. Instagram DMs are routed to normal Chatwoot conversations. Instagram comments become independent Chatwoot conversations; the original publication id or URL is preserved in Chatwoot `custom_attributes` and in the visible first message context.
+
+Duplicate protection uses deterministic Chatwoot `source_id` values derived from Meta ids (`ig:dm:*`, `ig:comment:*`, and `ig:event:*`). Same-payload duplicates are suppressed before delivery, while repeated Meta deliveries rely on those stable source ids being reconciled by Chatwoot.
 
 AJAWMRP now publishes the required InstagramAccount Chatwoot linkage fields:
 
