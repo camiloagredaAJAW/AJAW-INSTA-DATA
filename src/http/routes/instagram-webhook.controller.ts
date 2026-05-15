@@ -1,7 +1,9 @@
-import { Controller, Get, Headers, HttpCode, Logger, Query, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Headers, HttpCode, Logger, Query, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Request } from 'express';
+import { InstagramBusinessLoginError, InstagramBusinessLoginService } from '../../application/instagramBusinessLogin';
+import { InstagramCallbackResult } from '../../application/ports/instagram-login.port';
 import { InstagramWebhookRoutingService } from '../../application/instagramWebhookRouting';
 import { InstagramWebhookRouteResult } from '../../application/ports/instagram-webhook.port';
 import { EnvironmentConfig } from '../../config/environment';
@@ -14,15 +16,42 @@ export class InstagramWebhookController {
 
   constructor(
     private readonly configService: ConfigService<EnvironmentConfig, true>,
+    private readonly instagramBusinessLogin: InstagramBusinessLoginService,
     private readonly routingService: InstagramWebhookRoutingService,
   ) {}
 
   @Get()
-  verify(
+  async handleGet(
     @Query('hub.mode') mode: string | undefined,
     @Query('hub.verify_token') verifyToken: string | undefined,
     @Query('hub.challenge') challenge: string | undefined,
-  ): string {
+    @Query('code') code: string | undefined,
+    @Query('state') state: string | undefined,
+  ): Promise<string | InstagramCallbackResult> {
+    if (challenge !== undefined) {
+      return this.verify(mode, verifyToken, challenge);
+    }
+
+    if (code !== undefined && state !== undefined) {
+      try {
+        return await this.instagramBusinessLogin.completeCallback({ code, state });
+      } catch (error) {
+        if (error instanceof InstagramBusinessLoginError) {
+          if (error.status === 'unauthorized') {
+            throw new UnauthorizedException(error.message);
+          }
+
+          throw new BadRequestException(error.message);
+        }
+
+        throw error;
+      }
+    }
+
+    throw new BadRequestException('Invalid Instagram webhook GET request');
+  }
+
+  private verify(mode: string | undefined, verifyToken: string | undefined, challenge: string | undefined): string {
     const expectedToken = this.configService.get('META_WEBHOOK_VERIFY_TOKEN', { infer: true });
 
     if (!expectedToken || mode !== 'subscribe' || !verifyToken || verifyToken !== expectedToken || challenge === undefined) {
