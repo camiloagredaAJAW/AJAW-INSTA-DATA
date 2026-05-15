@@ -359,6 +359,7 @@ De la respuesta fallback se debe usar principalmente:
 - Crear o actualizar contactos, conversaciones y mensajes en Chatwoot a partir de eventos de Instagram.
 - Crear automáticamente un API Channel/inbox en la cuenta Chatwoot del cliente si no existe para esa `InstagramAccount`.
 - Reutilizar el API Channel/inbox existente si ya está vinculado a la `InstagramAccount`.
+- Nombrar los inboxes API con el nombre de la cuenta terminado en `IG`; si existe más de una cuenta integrada con el mismo nombre, agregar consecutivo al final, por ejemplo `Cliente IG 2`.
 - Recibir o consultar mensajes salientes generados en Chatwoot.
 - Enviar esos mensajes salientes a Instagram mediante Meta Graph API.
 - Sincronizar estado operativo y trazabilidad hacia Axelor cuando corresponda.

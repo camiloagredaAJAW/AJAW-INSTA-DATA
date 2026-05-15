@@ -79,10 +79,9 @@ export class ActivateInstagramIntegrationService {
       const chatwootApiKey = agent.chatwootApiKey;
       const chatwootAccountId = await this.resolveChatwootAccountId(instagramAccount, chatwootApiKey);
 
-      const inboxName = buildApiInboxName(instagramAccount);
-      const existingInbox = (await this.chatwootClient.listInboxes(chatwootAccountId, chatwootApiKey)).find(
-        (inbox) => isChatwootApiChannelInbox(inbox) && inbox.name === inboxName,
-      );
+      const apiInboxes = (await this.chatwootClient.listInboxes(chatwootAccountId, chatwootApiKey)).filter(isChatwootApiChannelInbox);
+      const inboxName = buildAvailableApiInboxName(instagramAccount, apiInboxes);
+      const existingInbox = apiInboxes.find((inbox) => inbox.name === inboxName);
       const inbox = existingInbox ?? (await this.chatwootClient.createApiInbox(chatwootAccountId, chatwootApiKey, { name: inboxName }));
 
       const updatedInstagramAccount = await this.axelorClient.updateInstagramAccount(
@@ -155,14 +154,30 @@ export function missingLinkageFields(instagramAccount: AxelorInstagramAccountRec
 
 export function buildApiInboxName(instagramAccount: AxelorInstagramAccountRecord): string {
   if (instagramAccount.name) {
-    return `Instagram ${instagramAccount.name}`;
+    return `${instagramAccount.name} IG`;
   }
 
   if (instagramAccount.username) {
-    return `Instagram @${instagramAccount.username}`;
+    return `${instagramAccount.username} IG`;
   }
 
-  return `Instagram Account ${instagramAccount.id}`;
+  return `Instagram Account ${instagramAccount.id} IG`;
+}
+
+export function buildAvailableApiInboxName(instagramAccount: AxelorInstagramAccountRecord, existingInboxes: Array<Pick<ChatwootApiChannelSummary, 'name'>>): string {
+  const baseName = buildApiInboxName(instagramAccount);
+  const existingNames = new Set(existingInboxes.map((inbox) => inbox.name));
+
+  if (!existingNames.has(baseName)) {
+    return baseName;
+  }
+
+  let suffix = 2;
+  while (existingNames.has(`${baseName} ${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${baseName} ${suffix}`;
 }
 
 function existingChatwootLinkage(instagramAccount: AxelorInstagramAccountRecord): ExistingChatwootLinkage | null {

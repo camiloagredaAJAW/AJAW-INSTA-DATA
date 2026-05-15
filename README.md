@@ -73,6 +73,8 @@ When those fields are present in the returned InstagramAccount shape, activation
 
 After creating or reusing a Chatwoot inbox, the service reads `InstagramAccount` back from AJAWMRP and returns `active` only if persisted Chatwoot IDs/status match the expected values.
 
+Chatwoot API Channel inboxes are named from the Instagram account display name and end with `IG`, for example `Chakana Geodesic Domes IG`. If another API inbox already uses that name, the service appends a numeric suffix like `Chakana Geodesic Domes IG 2`.
+
 ## Verified real activation
 
 The first real activation was verified with `agentId=1`:
