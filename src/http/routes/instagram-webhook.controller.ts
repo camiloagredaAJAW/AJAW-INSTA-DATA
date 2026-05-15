@@ -2,13 +2,18 @@ import { Controller, Get, Headers, HttpCode, Query, Post, Req, UnauthorizedExcep
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Request } from 'express';
+import { InstagramWebhookRoutingService } from '../../application/instagramWebhookRouting';
+import { InstagramWebhookRouteResult } from '../../application/ports/instagram-webhook.port';
 import { EnvironmentConfig } from '../../config/environment';
 
 type RawBodyRequest = Request & { rawBody?: Buffer };
 
 @Controller('integrations/instagram/webhook')
 export class InstagramWebhookController {
-  constructor(private readonly configService: ConfigService<EnvironmentConfig, true>) {}
+  constructor(
+    private readonly configService: ConfigService<EnvironmentConfig, true>,
+    private readonly routingService: InstagramWebhookRoutingService,
+  ) {}
 
   @Get()
   verify(
@@ -27,14 +32,14 @@ export class InstagramWebhookController {
 
   @Post()
   @HttpCode(200)
-  ingest(@Headers('x-hub-signature-256') signature: string | undefined, @Req() request: RawBodyRequest): { status: 'ok' } {
+  async ingest(@Headers('x-hub-signature-256') signature: string | undefined, @Req() request: RawBodyRequest): Promise<InstagramWebhookRouteResult> {
     const rawBody = request.rawBody;
 
     if (!rawBody || !this.isValidSignature(signature, rawBody)) {
       throw new UnauthorizedException('Invalid webhook signature');
     }
 
-    return { status: 'ok' };
+    return this.routingService.route({ payload: request.body });
   }
 
   private isValidSignature(signature: string | undefined, rawBody: Buffer): boolean {

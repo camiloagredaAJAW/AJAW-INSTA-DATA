@@ -4,6 +4,7 @@ import {
   buildAxelorAuthenticatedRestHeaders,
   buildAxelorSessionHeaders,
   buildBasicAuthHeader,
+  buildInstagramAccountSearchByInstagramUserIdPayload,
   buildInstagramAccountSearchPayload,
   DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS,
   DefaultAxelorClient,
@@ -213,7 +214,24 @@ describe('DefaultAxelorClient', () => {
         _domainContext: { agentId: 7 },
       },
     });
-    expect(DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS).toEqual(expect.arrayContaining(['chatwootAccountId', 'chatwootInboxId', 'chatwootChannelId']));
+    expect(DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS).toEqual(expect.arrayContaining(['instagramUserId', 'accessToken', 'agent.chatwootApiKey', 'chatwootAccountId', 'chatwootInboxId', 'chatwootChannelId']));
+  });
+
+  it('searches InstagramAccount by instagramUserId for webhook routing and returns the first match', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({
+        body: { data: [{ id: 11, instagramUserId: '178414000000', agent: { id: 7, chatwootApiKey: 'agent-secret' } }] },
+      }),
+    );
+    const client = new DefaultAxelorClient(configService(), fetcher);
+
+    await expect(client.findInstagramAccountByInstagramUserId('178414000000')).resolves.toEqual({
+      id: 11,
+      instagramUserId: '178414000000',
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+    });
+
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(buildInstagramAccountSearchByInstagramUserIdPayload('178414000000'));
   });
 
   it('uses id/version safe write shape for InstagramAccount updates', async () => {

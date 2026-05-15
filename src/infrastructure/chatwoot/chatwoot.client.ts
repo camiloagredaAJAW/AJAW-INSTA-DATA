@@ -33,6 +33,52 @@ export interface CreateChatwootApiInboxPayload {
   };
 }
 
+export interface ChatwootContactSummary {
+  id: number;
+  identifier?: string;
+}
+
+export interface ChatwootContactInboxSummary {
+  id: number;
+  source_id?: string;
+}
+
+export interface ChatwootConversationSummary {
+  id: number;
+  source_id?: string;
+}
+
+export interface ChatwootMessageSummary {
+  id: number;
+  source_id?: string;
+}
+
+export interface CreateChatwootContactPayload {
+  identifier: string;
+  name: string;
+  additional_attributes?: Record<string, unknown>;
+}
+
+export interface CreateChatwootContactInboxPayload {
+  contact_id: number;
+  inbox_id: number;
+  source_id: string;
+}
+
+export interface CreateChatwootConversationPayload {
+  inbox_id: number;
+  contact_id: number;
+  source_id: string;
+  contact_inbox_id?: number;
+  custom_attributes?: Record<string, unknown>;
+}
+
+export interface CreateChatwootIncomingMessagePayload {
+  content: string;
+  source_id: string;
+  content_attributes?: Record<string, unknown>;
+}
+
 export interface ChatwootClientConfig {
   baseUrl: string;
 }
@@ -98,10 +144,55 @@ export class DefaultChatwootClient {
     return parseInbox(await response.json());
   }
 
+  async createContact(accountId: number, apiAccessToken: string, payload: CreateChatwootContactPayload): Promise<ChatwootContactSummary> {
+    const response = await this.postJson(accountId, apiAccessToken, '/contacts', payload);
+    return parseIdSummary(await response.json(), 'Chatwoot contact response is missing id');
+  }
+
+  async createContactInbox(accountId: number, apiAccessToken: string, payload: CreateChatwootContactInboxPayload): Promise<ChatwootContactInboxSummary> {
+    const response = await this.postJson(accountId, apiAccessToken, '/contact_inboxes', payload);
+    return parseIdSummary(await response.json(), 'Chatwoot contact_inbox response is missing id');
+  }
+
+  async createConversation(accountId: number, apiAccessToken: string, payload: CreateChatwootConversationPayload): Promise<ChatwootConversationSummary> {
+    const response = await this.postJson(accountId, apiAccessToken, '/conversations', payload);
+    return parseIdSummary(await response.json(), 'Chatwoot conversation response is missing id');
+  }
+
+  async createIncomingMessage(
+    accountId: number,
+    apiAccessToken: string,
+    conversationId: number,
+    payload: CreateChatwootIncomingMessagePayload,
+  ): Promise<ChatwootMessageSummary> {
+    const response = await this.postJson(accountId, apiAccessToken, `/conversations/${conversationId}/messages`, {
+      ...payload,
+      message_type: 'incoming',
+    });
+    return parseIdSummary(await response.json(), 'Chatwoot message response is missing id');
+  }
+
   private readConfig(): ChatwootClientConfig {
     return {
       baseUrl: this.configService.get('CHATWOOT_BASE_URL', { infer: true }),
     };
+  }
+
+  private async postJson(accountId: number, apiAccessToken: string, path: string, payload: object): Promise<Awaited<ReturnType<FetchLike>>> {
+    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, `/api/v1/accounts/${accountId}${path}`), {
+      method: 'POST',
+      headers: {
+        ...buildChatwootAuthHeaders(apiAccessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chatwoot API request failed with status ${response.status}`);
+    }
+
+    return response;
   }
 }
 
@@ -187,6 +278,32 @@ function parseInbox(body: unknown): ChatwootApiChannelSummary {
     inbox_identifier: optionalString(body.inbox_identifier),
     hmac_token: optionalString(body.hmac_token),
   };
+}
+
+function parseIdSummary<T extends { id: number; source_id?: string; identifier?: string }>(body: unknown, missingIdMessage: string): T {
+  const record = unwrapPayload(body);
+  if (!isRecord(record) || typeof record.id !== 'number') {
+    throw new Error(missingIdMessage);
+  }
+
+  return {
+    id: record.id,
+    source_id: optionalString(record.source_id),
+    identifier: optionalString(record.identifier),
+  } as T;
+}
+
+function unwrapPayload(body: unknown): unknown {
+  if (!isRecord(body)) {
+    return body;
+  }
+  if (isRecord(body.payload)) {
+    return body.payload;
+  }
+  if (isRecord(body.data)) {
+    return body.data;
+  }
+  return body;
 }
 
 function joinUrl(baseUrl: string, path: string): string {

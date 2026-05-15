@@ -21,7 +21,13 @@ export interface AxelorInstagramAccountRecord {
   version?: number;
   name?: string;
   username?: string;
-  agent?: { id: string | number };
+  instagramUserId?: string;
+  accessToken?: string;
+  scopes?: unknown;
+  instagramScopes?: unknown;
+  grantedScopes?: unknown;
+  granted_scopes?: unknown;
+  agent?: { id: string | number; chatwootApiKey?: string };
   chatwootAccountId?: string | number;
   chatwootInboxId?: string | number;
   chatwootChannelId?: string | number;
@@ -46,7 +52,10 @@ export const DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS = [
   'version',
   'name',
   'username',
+  'instagramUserId',
+  'accessToken',
   'agent',
+  'agent.chatwootApiKey',
   'chatwootAccountId',
   'chatwootInboxId',
   'chatwootChannelId',
@@ -188,6 +197,25 @@ export class DefaultAxelorClient {
     return parseAxelorList<AxelorInstagramAccountRecord>(await response.json());
   }
 
+  async findInstagramAccountByInstagramUserId(instagramUserId: string, options: AxelorSearchOptions = {}): Promise<AxelorInstagramAccountRecord | null> {
+    const config = this.readConfig();
+    const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/search`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...this.buildAuthenticatedRestHeaders(config),
+      },
+      body: JSON.stringify(buildInstagramAccountSearchByInstagramUserIdPayload(instagramUserId, options)),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Axelor InstagramAccount search failed with status ${response.status}`);
+    }
+
+    return parseAxelorList<AxelorInstagramAccountRecord>(await response.json())[0] ?? null;
+  }
+
   async updateInstagramAccount(id: string | number, version: number, data: Record<string, unknown>): Promise<AxelorInstagramAccountRecord> {
     const config = this.readConfig();
     const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/${id}`, {
@@ -318,6 +346,18 @@ export function buildInstagramAccountSearchPayload(agentId: string | number, opt
     data: {
       _domain: 'self.agent.id=:agentId',
       _domainContext: { agentId },
+    },
+  };
+}
+
+export function buildInstagramAccountSearchByInstagramUserIdPayload(instagramUserId: string, options: AxelorSearchOptions = {}): Record<string, unknown> {
+  return {
+    offset: options.offset ?? 0,
+    limit: options.limit ?? 1,
+    fields: options.fields ?? DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS,
+    data: {
+      _domain: 'self.instagramUserId=:instagramUserId',
+      _domainContext: { instagramUserId },
     },
   };
 }
