@@ -9,7 +9,7 @@ import { IntegrationsController } from '../src/http/routes/integrations.controll
 import { applyTestEnvironment } from './test-env';
 
 const AUTHORIZE_URL =
-  'https://www.instagram.com/oauth/authorize?client_id=test-meta-app-id&redirect_uri=https%3A%2F%2Fapp.test%2Fintegrations%2Finstagram%2Fwebhook&response_type=code&scope=instagram_business_basic+instagram_business_manage_messages+instagram_business_manage_comments&state=state-123';
+  'https://www.instagram.com/oauth/authorize?client_id=test-meta-app-id&redirect_uri=https%3A%2F%2Fapp.test%2Fintegrations%2Finstagram%2Fwebhook&response_type=code&scope=instagram_business_basic%20instagram_business_manage_messages%20instagram_business_manage_comments&state=state-123';
 
 describe('GET /integrations/instagram/login', () => {
   let app: INestApplication;

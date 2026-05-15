@@ -116,13 +116,15 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
       throw new InstagramBusinessLoginError('META_APP_ID is required to start Instagram OAuth login');
     }
 
-    const url = new URL(INSTAGRAM_AUTHORIZE_URL);
-    url.searchParams.set('client_id', clientId);
-    url.searchParams.set('redirect_uri', this.getRedirectUri());
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', INSTAGRAM_BUSINESS_SCOPES.join(' '));
-    url.searchParams.set('state', state);
-    return url.toString();
+    const params = [
+      ['client_id', clientId],
+      ['redirect_uri', this.getRedirectUri()],
+      ['response_type', 'code'],
+      ['scope', INSTAGRAM_BUSINESS_SCOPES.join(' ')],
+      ['state', state],
+    ];
+
+    return `${INSTAGRAM_AUTHORIZE_URL}?${params.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&')}`;
   }
 
   private getRedirectUri(): string {
