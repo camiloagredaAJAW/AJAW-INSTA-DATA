@@ -4,6 +4,10 @@ import {
   buildAxelorAuthenticatedRestHeaders,
   buildAxelorSessionHeaders,
   buildBasicAuthHeader,
+  buildCreateInstagramAccountOAuthPlaceholderPayload,
+  buildInstagramAccountConnectedUpdate,
+  buildInstagramAccountOAuthStateUpdate,
+  buildInstagramAccountSearchByStatePayload,
   buildInstagramAccountSearchByInstagramUserIdPayload,
   buildInstagramAccountSearchPayload,
   DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS,
@@ -234,6 +238,39 @@ describe('DefaultAxelorClient', () => {
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(buildInstagramAccountSearchByInstagramUserIdPayload('178414000000'));
   });
 
+  it('builds OAuth placeholder and state search payloads for Instagram login', async () => {
+    const fetcher = jest
+      .fn<ReturnType<FetchLike>, Parameters<FetchLike>>()
+      .mockResolvedValueOnce(response({ body: { data: [{ id: 11, version: 3, instagramState: 'state-123' }] } }))
+      .mockResolvedValueOnce(response({ body: { data: { id: 12, version: 1, instagramState: 'state-456', active: false } } }))
+      .mockResolvedValueOnce(response({ body: { data: { id: 12, version: 2, instagramState: 'state-789', active: false } } }));
+    const client = new DefaultAxelorClient(configService(), fetcher);
+
+    await expect(client.findInstagramAccountByState('state-123')).resolves.toEqual({ id: 11, version: 3, instagramState: 'state-123' });
+    await expect(client.createInstagramAccount(7, 'state-456')).resolves.toEqual({ id: 12, version: 1, instagramState: 'state-456', active: false });
+    await expect(client.updateInstagramAccountOAuthState(12, 1, 'state-789')).resolves.toEqual({ id: 12, version: 2, instagramState: 'state-789', active: false });
+
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(buildInstagramAccountSearchByStatePayload('state-123'));
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual(buildCreateInstagramAccountOAuthPlaceholderPayload(7, 'state-456'));
+    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ data: { id: 12, version: 1, ...buildInstagramAccountOAuthStateUpdate('state-789') } });
+  });
+
+  it('builds connected account updates without OAuth state or optional empty expiry', () => {
+    expect(
+      buildInstagramAccountConnectedUpdate({
+        instagramUserId: '178414000000',
+        accessToken: 'short-lived-token',
+        connectedAt: '2026-05-15T20:00:00.000Z',
+      }),
+    ).toEqual({
+      instagramState: null,
+      instagramUserId: '178414000000',
+      accessToken: 'short-lived-token',
+      active: true,
+      connectedAt: '2026-05-15T20:00:00.000Z',
+    });
+  });
+
   it('uses id/version safe write shape for InstagramAccount updates', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
       response({
@@ -296,6 +333,10 @@ function configService(): ConfigService<EnvironmentConfig, true> {
     AXELOR_USERNAME: 'user',
     AXELOR_PASSWORD: 'pass',
     CHATWOOT_BASE_URL: 'https://chatwoot.test',
+    APP_BASE_URL: 'https://app.test',
+    META_APP_ID: 'meta-app-id',
+    META_APP_SECRET: 'meta-app-secret',
+    INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: false,
     AJAW_NAMESPACE: 'com.example.db',
     MODEL_NAME_AGENT: 'Agent',
     MODEL_NAME_INSTAGRAM_ACCOUNT: 'InstagramAccount',
