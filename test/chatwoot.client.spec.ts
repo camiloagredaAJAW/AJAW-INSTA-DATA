@@ -9,12 +9,12 @@ describe('DefaultChatwootClient', () => {
       ok: true,
       status: 200,
       headers: { get: () => null },
-      json: async () => ({ account_id: 42 }),
-      text: async () => '{"account_id":42}',
+      json: async () => ({ account_id: 42, accounts: [{ id: 42, name: 'AJAW AI' }] }),
+      text: async () => '{"account_id":42,"accounts":[{"id":42,"name":"AJAW AI"}]}',
     });
     const client = new DefaultChatwootClient(configService(), fetcher);
 
-    await expect(client.getProfile('chatwoot-secret')).resolves.toEqual({ account_id: 42 });
+    await expect(client.getProfile('chatwoot-secret')).resolves.toEqual({ account_id: 42, accounts: [{ id: 42, name: 'AJAW AI' }] });
 
     expect(fetcher).toHaveBeenCalledWith('https://chatwoot.test/api/v1/profile', {
       method: 'GET',

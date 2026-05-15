@@ -35,14 +35,14 @@ describe('ActivateInstagramIntegrationService', () => {
     expect(axelor.updateInstagramAccount).not.toHaveBeenCalled();
   });
 
-  it('uses stored chatwootAccountId for provisioning without resolving Chatwoot profile', async () => {
+  it('uses stored chatwootAccountId for provisioning and Chatwoot profile for inbox naming', async () => {
     const axelor = axelorMock({
       agent: { id: 7, chatwootApiKey: 'agent-secret' },
       instagramAccounts: [publishedInstagramAccount({ id: 11, version: 3, chatwootAccountId: 49 })],
     });
     const chatwoot = chatwootMock({
       accountId: 42,
-      createdInbox: { id: 101, channel_id: 201, name: 'Instagram Account 11 IG', channel_type: 'Channel::Api' },
+      createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' },
     });
     const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
 
@@ -53,9 +53,9 @@ describe('ActivateInstagramIntegrationService', () => {
       chatwootChannelId: 201,
     });
 
-    expect(chatwoot.getProfile).not.toHaveBeenCalled();
+    expect(chatwoot.getProfile).toHaveBeenCalledWith('agent-secret');
     expect(chatwoot.listInboxes).toHaveBeenCalledWith(49, 'agent-secret');
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', { name: 'Instagram Account 11 IG' });
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', { name: 'Chatwoot Account IG' });
   });
 
   it('falls back to Chatwoot profile when stored chatwootAccountId is missing or invalid', async () => {
@@ -81,7 +81,7 @@ describe('ActivateInstagramIntegrationService', () => {
       instagramAccounts: [publishedInstagramAccount({ id: 11, version: 3, chatwootAccountId: 49, chatwootInboxId: 0, chatwootChannelId: 0 })],
     });
     const chatwoot = chatwootMock({
-      createdInbox: { id: 101, channel_id: 201, name: 'Instagram Account 11 IG', channel_type: 'Channel::Api' },
+      createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' },
     });
     const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
 
@@ -92,8 +92,8 @@ describe('ActivateInstagramIntegrationService', () => {
       chatwootChannelId: 201,
     });
 
-    expect(chatwoot.getProfile).not.toHaveBeenCalled();
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', { name: 'Instagram Account 11 IG' });
+    expect(chatwoot.getProfile).toHaveBeenCalledWith('agent-secret');
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', { name: 'Chatwoot Account IG' });
     expect(axelor.updateInstagramAccount).toHaveBeenCalledTimes(1);
     expect(axelor.readInstagramAccount).toHaveBeenCalledWith(11);
   });
@@ -179,14 +179,14 @@ describe('ActivateInstagramIntegrationService', () => {
         {
           id: 100,
           channel_id: 200,
-          name: 'Instagram Account 11 IG',
+          name: 'Chatwoot Account IG',
           channel_type: 'Channel::Api',
           webhook_url: 'https://hooks.test/100',
           inbox_identifier: 'inbox-100',
           hmac_token: 'hmac-secret',
         },
       ],
-      createdInbox: { id: 101, channel_id: 201, name: 'Instagram Account 11 IG 2', channel_type: 'Channel::Api', webhook_url: 'https://hooks.test/101' },
+      createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG 2', channel_type: 'Channel::Api', webhook_url: 'https://hooks.test/101' },
     });
     const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
 
@@ -200,7 +200,7 @@ describe('ActivateInstagramIntegrationService', () => {
     });
 
     expect(chatwoot.listInboxes).toHaveBeenCalledWith(42, 'agent-secret');
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', { name: 'Instagram Account 11 IG 2' });
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', { name: 'Chatwoot Account IG 2' });
     expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(
       11,
       3,
@@ -209,7 +209,7 @@ describe('ActivateInstagramIntegrationService', () => {
         chatwootInboxId: 101,
         chatwootChannelId: 201,
         chatwootChannelType: 'Channel::Api',
-        chatwootInboxName: 'Instagram Account 11 IG 2',
+        chatwootInboxName: 'Chatwoot Account IG 2',
         chatwootWebhookUrl: 'https://hooks.test/101',
         chatwootIntegrationStatus: IntegrationStatus.Active,
         chatwootLastIntegrationError: null,
@@ -225,7 +225,7 @@ describe('ActivateInstagramIntegrationService', () => {
     const chatwoot = chatwootMock({
       accountId: 42,
       inboxes: [{ id: 99, channel_id: 199, name: 'Other inbox', channel_type: 'Channel::Api' }],
-      createdInbox: { id: 101, channel_id: 201, name: 'Instagram Account 11 IG', channel_type: 'Channel::Api', webhook_url: 'https://hooks.test/101' },
+      createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', webhook_url: 'https://hooks.test/101' },
     });
     const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
 
@@ -235,7 +235,7 @@ describe('ActivateInstagramIntegrationService', () => {
       chatwootChannelId: 201,
     });
 
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', { name: 'Instagram Account 11 IG' });
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', { name: 'Chatwoot Account IG' });
     expect(axelor.updateInstagramAccount).toHaveBeenCalledTimes(1);
     expect(axelor.readInstagramAccount).toHaveBeenCalledWith(11);
   });
@@ -250,7 +250,7 @@ describe('ActivateInstagramIntegrationService', () => {
       createdInbox: {
         id: 101,
         channel_id: 201,
-        name: 'Instagram Account 11 IG',
+        name: 'Chatwoot Account IG',
         channel_type: 'Channel::Api',
         webhook_url: 'https://hooks.test/101',
         inbox_identifier: 'inbox-101',
@@ -269,7 +269,7 @@ describe('ActivateInstagramIntegrationService', () => {
         chatwootInboxId: 101,
         chatwootChannelId: 201,
         chatwootChannelType: 'Channel::Api',
-        chatwootInboxName: 'Instagram Account 11 IG',
+        chatwootInboxName: 'Chatwoot Account IG',
         chatwootInboxIdentifier: 'inbox-101',
         chatwootWebhookUrl: 'https://hooks.test/101',
         chatwootHmacToken: 'hmac-secret',
@@ -288,7 +288,7 @@ describe('ActivateInstagramIntegrationService', () => {
     });
     const chatwoot = chatwootMock({
       accountId: 42,
-      createdInbox: { id: 101, channel_id: 201, name: 'Instagram Account 11 IG', channel_type: 'Channel::Api', hmac_token: 'hmac-secret' },
+      createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', hmac_token: 'hmac-secret' },
     });
     const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
 
@@ -357,14 +357,14 @@ describe('ActivateInstagramIntegrationService', () => {
   });
 
   it('builds deterministic API inbox names from InstagramAccount shape', () => {
-    expect(buildApiInboxName({ id: 11, name: 'Client A' })).toBe('Client A IG');
-    expect(buildApiInboxName({ id: 11, username: 'client_a' })).toBe('client_a IG');
-    expect(buildApiInboxName({ id: 11 })).toBe('Instagram Account 11 IG');
+    expect(buildApiInboxName('Client A')).toBe('Client A IG');
+    expect(buildApiInboxName('  Client A  ')).toBe('Client A IG');
+    expect(buildApiInboxName(undefined)).toBe('Instagram Account IG');
   });
 
   it('adds a consecutive suffix when an API inbox name already exists', () => {
     expect(
-      buildAvailableApiInboxName({ id: 11, name: 'Client A' }, [
+      buildAvailableApiInboxName('Client A', [
         { name: 'Client A IG' },
         { name: 'Client A IG 2' },
       ]),
@@ -456,10 +456,15 @@ function axelorMock(options: AxelorMockOptions = {}) {
 }
 
 function chatwootMock(options: ChatwootMockOptions = {}) {
+  const accountId = options.accountId ?? 1;
+
   return {
-    getProfile: jest.fn().mockResolvedValue({ account_id: options.accountId ?? 1 }),
+    getProfile: jest.fn().mockResolvedValue({
+      account_id: accountId,
+      accounts: options.accounts ?? [{ id: accountId, name: 'Chatwoot Account' }],
+    }),
     listInboxes: jest.fn().mockResolvedValue(options.inboxes ?? []),
-    createApiInbox: jest.fn().mockResolvedValue(options.createdInbox ?? { id: 100, channel_id: 200, name: 'Instagram Account 11 IG', channel_type: 'Channel::Api' }),
+    createApiInbox: jest.fn().mockResolvedValue(options.createdInbox ?? { id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' }),
   } as unknown as jest.Mocked<DefaultChatwootClient>;
 }
 
@@ -490,6 +495,7 @@ interface AxelorMockOptions {
 
 interface ChatwootMockOptions {
   accountId?: number;
+  accounts?: Array<{ id: number; name?: string }>;
   inboxes?: Array<Record<string, unknown>>;
   createdInbox?: Record<string, unknown>;
 }

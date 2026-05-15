@@ -5,6 +5,12 @@ import { FetchLike } from '../axelor/axelor.client';
 
 export interface ChatwootProfile {
   account_id: number;
+  accounts?: ChatwootProfileAccount[];
+}
+
+export interface ChatwootProfileAccount {
+  id: number;
+  name?: string;
 }
 
 export interface ChatwootApiChannelSummary {
@@ -127,7 +133,24 @@ function parseProfile(body: unknown): ChatwootProfile {
     throw new Error('Chatwoot profile response is missing account_id');
   }
 
-  return { account_id: body.account_id };
+  return {
+    account_id: body.account_id,
+    accounts: parseProfileAccounts(body.accounts),
+  };
+}
+
+function parseProfileAccounts(value: unknown): ChatwootProfileAccount[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value.filter(isRecord).flatMap((account) => {
+    if (typeof account.id !== 'number') {
+      return [];
+    }
+
+    return [{ id: account.id, name: optionalString(account.name) }];
+  });
 }
 
 function parseInboxList(body: unknown): ChatwootApiChannelSummary[] {
