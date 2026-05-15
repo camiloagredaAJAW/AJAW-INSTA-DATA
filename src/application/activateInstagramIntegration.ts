@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { IntegrationStatus } from '../domain/integrationStatus';
 import { AxelorClient, AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
-import { ChatwootClient, ChatwootApiChannelSummary, DefaultChatwootClient, isChatwootApiChannelInbox } from '../infrastructure/chatwoot/chatwoot.client';
+import { ChatwootClient, ChatwootApiChannelSummary, ChatwootProfile, DefaultChatwootClient, isChatwootApiChannelInbox } from '../infrastructure/chatwoot/chatwoot.client';
 import { redactText } from '../shared/redaction';
 import { ActivationRequest, ActivationResult } from './ports/activation.port';
 
@@ -77,10 +77,11 @@ export class ActivateInstagramIntegrationService {
       }
 
       const chatwootApiKey = agent.chatwootApiKey;
-      const chatwootAccountId = await this.resolveChatwootAccountId(instagramAccount, chatwootApiKey);
+      const chatwootProfile = await this.chatwootClient.getProfile(chatwootApiKey);
+      const chatwootAccountId = this.resolveChatwootAccountId(instagramAccount, chatwootProfile);
 
       const apiInboxes = (await this.chatwootClient.listInboxes(chatwootAccountId, chatwootApiKey)).filter(isChatwootApiChannelInbox);
-      const inboxName = buildAvailableApiInboxName(instagramAccount, apiInboxes);
+      const inboxName = buildAvailableApiInboxName(resolveChatwootAccountName(chatwootProfile, chatwootAccountId), apiInboxes);
       const existingInbox = apiInboxes.find((inbox) => inbox.name === inboxName);
       const inbox = existingInbox ?? (await this.chatwootClient.createApiInbox(chatwootAccountId, chatwootApiKey, { name: inboxName }));
 
@@ -114,13 +115,12 @@ export class ActivateInstagramIntegrationService {
     }
   }
 
-  private async resolveChatwootAccountId(instagramAccount: AxelorInstagramAccountRecord, chatwootApiKey: string): Promise<number> {
+  private resolveChatwootAccountId(instagramAccount: AxelorInstagramAccountRecord, profile: ChatwootProfile): number {
     const persistedAccountId = positiveIntegerId(instagramAccount.chatwootAccountId);
     if (persistedAccountId) {
       return persistedAccountId;
     }
 
-    const profile = await this.chatwootClient.getProfile(chatwootApiKey);
     const profileAccountId = positiveIntegerId(profile.account_id);
     if (!profileAccountId) {
       throw new Error('Chatwoot profile response has invalid account_id');
@@ -152,20 +152,13 @@ export function missingLinkageFields(instagramAccount: AxelorInstagramAccountRec
   return REQUIRED_LINKAGE_FIELDS.filter((field) => !Object.prototype.hasOwnProperty.call(instagramAccount, field));
 }
 
-export function buildApiInboxName(instagramAccount: AxelorInstagramAccountRecord): string {
-  if (instagramAccount.name) {
-    return `${instagramAccount.name} IG`;
-  }
-
-  if (instagramAccount.username) {
-    return `${instagramAccount.username} IG`;
-  }
-
-  return `Instagram Account ${instagramAccount.id} IG`;
+export function buildApiInboxName(accountName: string | undefined): string {
+  const normalizedName = accountName?.trim();
+  return `${normalizedName || 'Instagram Account'} IG`;
 }
 
-export function buildAvailableApiInboxName(instagramAccount: AxelorInstagramAccountRecord, existingInboxes: Array<Pick<ChatwootApiChannelSummary, 'name'>>): string {
-  const baseName = buildApiInboxName(instagramAccount);
+export function buildAvailableApiInboxName(accountName: string | undefined, existingInboxes: Array<Pick<ChatwootApiChannelSummary, 'name'>>): string {
+  const baseName = buildApiInboxName(accountName);
   const existingNames = new Set(existingInboxes.map((inbox) => inbox.name));
 
   if (!existingNames.has(baseName)) {
@@ -178,6 +171,15 @@ export function buildAvailableApiInboxName(instagramAccount: AxelorInstagramAcco
   }
 
   return `${baseName} ${suffix}`;
+}
+
+export function resolveChatwootAccountName(profile: ChatwootProfile, accountId: number): string | undefined {
+  const matchingAccount = profile.accounts?.find((account) => account.id === accountId && account.name?.trim());
+  if (matchingAccount?.name) {
+    return matchingAccount.name;
+  }
+
+  return profile.accounts?.find((account) => account.name?.trim())?.name;
 }
 
 function existingChatwootLinkage(instagramAccount: AxelorInstagramAccountRecord): ExistingChatwootLinkage | null {
