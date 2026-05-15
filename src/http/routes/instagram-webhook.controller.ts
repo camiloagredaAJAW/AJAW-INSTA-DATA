@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, HttpCode, Query, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Headers, HttpCode, Logger, Query, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Request } from 'express';
@@ -10,6 +10,8 @@ type RawBodyRequest = Request & { rawBody?: Buffer };
 
 @Controller('integrations/instagram/webhook')
 export class InstagramWebhookController {
+  private readonly logger = new Logger(InstagramWebhookController.name);
+
   constructor(
     private readonly configService: ConfigService<EnvironmentConfig, true>,
     private readonly routingService: InstagramWebhookRoutingService,
@@ -36,9 +38,11 @@ export class InstagramWebhookController {
     const rawBody = request.rawBody;
 
     if (!rawBody || !this.isValidSignature(signature, rawBody)) {
+      this.logger.warn('Rejected Instagram webhook POST: invalid or missing Meta signature');
       throw new UnauthorizedException('Invalid webhook signature');
     }
 
+    this.logger.log('Accepted signed Instagram webhook POST');
     return this.routingService.route({ payload: request.body });
   }
 

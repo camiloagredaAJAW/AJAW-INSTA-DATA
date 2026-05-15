@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { IntegrationStatus } from '../domain/integrationStatus';
 import { AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
 import { DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
@@ -16,6 +16,8 @@ const REQUIRED_INSTAGRAM_SCOPES = ['instagram_business_manage_messages', 'instag
 
 @Injectable()
 export class InstagramWebhookRoutingService {
+  private readonly logger = new Logger(InstagramWebhookRoutingService.name);
+
   constructor(
     private readonly axelorClient: DefaultAxelorClient,
     private readonly chatwootClient: DefaultChatwootClient,
@@ -29,8 +31,15 @@ export class InstagramWebhookRoutingService {
     const seenEvents = new Set<string>();
 
     if (events.length === 0) {
+      this.logger.warn('Instagram webhook ignored: no supported DM/comment events found');
       return { status: 'ignored', processed, ignored: [{ reason: 'no_supported_events' }], failures };
     }
+
+    this.logger.log(
+      `Instagram webhook received: events=${events.length} kinds=${uniqueValues(events.map((event) => event.kind)).join(',')} instagramAccountIds=${uniqueValues(
+        events.map((event) => event.instagramAccountId),
+      ).join(',')}`,
+    );
 
     await this.axelorClient.login();
 
@@ -46,26 +55,41 @@ export class InstagramWebhookRoutingService {
         const scopeFailure = instagramScopePreconditionFailure(account);
         if (scopeFailure) {
           failures.push({ sourceEventId: event.sourceEventId, classification: 'non_retriable', reason: scopeFailure });
+          this.logger.warn(`Instagram webhook event not routed: kind=${event.kind} sourceEventId=${event.sourceEventId} reason=${scopeFailure}`);
           continue;
         }
 
         if (!isRoutableInstagramAccount(account)) {
-          failures.push({ sourceEventId: event.sourceEventId, classification: 'non_retriable', reason: routingPreconditionFailure(account) });
+          const reason = routingPreconditionFailure(account);
+          failures.push({ sourceEventId: event.sourceEventId, classification: 'non_retriable', reason });
+          this.logger.warn(`Instagram webhook event not routed: kind=${event.kind} sourceEventId=${event.sourceEventId} reason=${reason}`);
           continue;
         }
 
-        processed.push(await this.deliverEvent(event, account));
+        const delivered = await this.deliverEvent(event, account);
+        processed.push(delivered);
+        this.logger.log(
+          `Instagram webhook event routed: kind=${event.kind} sourceEventId=${event.sourceEventId} conversationSourceId=${delivered.conversationSourceId}`,
+        );
       } catch (error) {
-        failures.push({ sourceEventId: event.sourceEventId, classification: 'retriable', reason: redactText(error instanceof Error ? error.message : String(error)) });
+        const reason = redactText(error instanceof Error ? error.message : String(error));
+        failures.push({ sourceEventId: event.sourceEventId, classification: 'retriable', reason });
+        this.logger.error(`Instagram webhook event failed: kind=${event.kind} sourceEventId=${event.sourceEventId} reason=${reason}`);
       }
     }
 
-    return {
+    const result: InstagramWebhookRouteResult = {
       status: failures.length > 0 ? 'failed' : processed.length > 0 ? 'processed' : 'ignored',
       processed,
       ignored,
       failures,
     };
+
+    this.logger.log(
+      `Instagram webhook routing completed: status=${result.status} processed=${processed.length} ignored=${ignored.length} failures=${failures.length}`,
+    );
+
+    return result;
   }
 
   private async deliverEvent(event: NormalizedInstagramWebhookEvent, account: RoutableInstagramAccount): Promise<InstagramWebhookDeliveredEvent> {
@@ -105,6 +129,10 @@ export class InstagramWebhookRoutingService {
 
     return { kind: event.kind, sourceEventId: event.sourceEventId, conversationSourceId, messageSourceId };
   }
+}
+
+function uniqueValues(values: string[]): string[] {
+  return [...new Set(values)].sort();
 }
 
 export function normalizeInstagramWebhookPayload(payload: unknown): NormalizedInstagramWebhookEvent[] {
