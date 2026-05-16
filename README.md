@@ -41,16 +41,25 @@ Optional foundation variables currently validated when present:
 - `AXELOR_LOGIN_PATH`
 - `CHATWOOT_MAIN_ACCOUNT_ID`
 - `CHATWOOT_MAIN_API_ACCESS_TOKEN`
+- `APP_BASE_URL`
 - `META_APP_ID`
 - `META_APP_SECRET`
 - `INSTAGRAM_BUSINESS_ACCOUNT_ID`
 - `INSTAGRAM_ACCESS_TOKEN`
+- `INSTAGRAM_OAUTH_REDIRECT_URI`
+- `INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE`
 - `LOG_LEVEL`
 
 Instagram webhook routing requires these Meta values in every environment where the callback is enabled:
 
 - `META_APP_SECRET` — the Meta app secret used to validate `X-Hub-Signature-256` POST signatures.
 - `META_WEBHOOK_VERIFY_TOKEN` — an operator-chosen token that must match the token entered in Meta Developers during webhook verification.
+
+Instagram Business Login requires:
+
+- `META_APP_ID` and `META_APP_SECRET` from the same Meta app configured for webhooks and login.
+- `INSTAGRAM_OAUTH_REDIRECT_URI` set to the public webhook URL, for example `https://<public-host>/integrations/instagram/webhook`. If omitted, the app derives it from `APP_BASE_URL` plus `/integrations/instagram/webhook`.
+- `INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE=false` by default. Set it to `true` only after confirming the Graph long-lived token exchange is available for the Meta app; short-lived token activation still succeeds if this optional exchange fails.
 
 Do not commit real values. Keep production secrets in the deployment secret store, not in source control.
 
@@ -95,6 +104,28 @@ When those fields are present in the returned InstagramAccount shape, activation
 After creating or reusing a Chatwoot inbox, the service reads `InstagramAccount` back from AJAWMRP and returns `active` only if persisted Chatwoot IDs/status match the expected values.
 
 Chatwoot API Channel inboxes are named from the Instagram account display name and end with `IG`, for example `Chakana Geodesic Domes IG`. If another API inbox already uses that name, the service appends a numeric suffix like `Chakana Geodesic Domes IG 2`.
+
+## Instagram Business Login
+
+`GET /integrations/instagram/login?agentId=...` starts the app-owned Instagram Business OAuth flow. It is an internal-only endpoint guarded by `x-internal-api-key`.
+
+For manual Postman testing:
+
+1. Send `GET https://<public-host>/integrations/instagram/login?agentId=<agent-id>` with `x-internal-api-key` set.
+2. Disable automatic redirects in Postman so the `302 Location` header is visible.
+3. Copy the `Location` URL into a browser and complete the Meta login flow there.
+
+The same public URL, `/integrations/instagram/webhook`, handles all Meta callbacks:
+
+- GET webhook verification with `hub.challenge` returns the challenge when `META_WEBHOOK_VERIFY_TOKEN` matches.
+- GET OAuth callback with `code` and `state` completes Instagram Business Login when no `hub.challenge` is present.
+- POST webhook events continue through signed webhook ingestion.
+
+In Meta Developers, register the exact redirect URL in both the Business/Facebook Login settings and the Instagram Business Login settings. The redirect URL must match `INSTAGRAM_OAUTH_REDIRECT_URI` exactly.
+
+The callback exchanges Meta's `code` for a short-lived Instagram token and stores the connection in AJAWMRP. Long-lived token exchange is optional, best-effort, and controlled by `INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE`; keep it disabled until the app has been validated against Meta's current token-exchange behavior.
+
+Historical n8n workflow exports under `references/n8n/` contained operational secrets. Treat those values as compromised: rotate any credentials or tokens that appeared there, scrub references before sharing, and do not use n8n as the runtime owner for this login/callback flow anymore.
 
 ## Verified real activation
 

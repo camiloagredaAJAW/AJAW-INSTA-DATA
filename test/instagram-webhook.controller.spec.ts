@@ -70,6 +70,23 @@ describe('InstagramWebhookController', () => {
       .expect('challenge-123');
   });
 
+  it('prioritizes Meta verification when hub.challenge is mixed with OAuth query params', async () => {
+    await request(app.getHttpServer())
+      .get('/integrations/instagram/webhook')
+      .query({
+        'hub.mode': 'subscribe',
+        'hub.verify_token': 'test-webhook-verify-token',
+        'hub.challenge': 'challenge-123',
+        code: 'code-123',
+        state: 'state-123',
+      })
+      .expect(200)
+      .expect('challenge-123');
+
+    expect(loginService.completeCallback).not.toHaveBeenCalled();
+    expect(routingService.route).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid verification requests', async () => {
     await request(app.getHttpServer())
       .get('/integrations/instagram/webhook')
