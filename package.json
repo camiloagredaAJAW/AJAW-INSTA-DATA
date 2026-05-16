@@ -1,6 +1,6 @@
 {
   "name": "ajaw-insta-data",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "NestJS middleware foundation for AJAWMRP, Chatwoot, and Instagram integration.",
   "scripts": {

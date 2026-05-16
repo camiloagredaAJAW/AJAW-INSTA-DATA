@@ -2,7 +2,7 @@
 
 NestJS + TypeScript backend foundation for the AJAWMRP, Chatwoot, and Instagram middleware described in `PRD.md`.
 
-Current version: `0.1.0`.
+Current version: `1.0.0`.
 
 ## Runtime
 
@@ -144,6 +144,25 @@ The first real activation was verified with `agentId=1`:
 ```
 
 Running the activation twice returned the same Chatwoot IDs, confirming idempotency.
+
+## Verified Instagram Business Login
+
+The app-owned Instagram Business Login flow was verified with `agentId=1` after registering the same redirect URL in both Meta Business/Facebook Login and Instagram Business Login settings:
+
+```json
+{
+  "status": "connected",
+  "instagramAccountId": 1,
+  "instagramUserId": "35972463999033656",
+  "tokenSource": "short_lived",
+  "longLivedTokenExchange": {
+    "attempted": false,
+    "succeeded": false
+  }
+}
+```
+
+This is the v1.0.0 release baseline: Chatwoot API Channel provisioning, signed Instagram webhooks, inbound DM/comment routing, and in-app Instagram Business Login are implemented and verified.
 
 ## Redaction behavior
 
