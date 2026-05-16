@@ -17,6 +17,8 @@ export interface InstagramCallbackResult {
   status: 'connected';
   instagramAccountId: string | number;
   instagramUserId: string;
+  name?: string;
+  username?: string;
   tokenSource: 'short_lived' | 'long_lived';
   longLivedTokenExchange?: InstagramLongLivedTokenExchangeMetadata;
 }

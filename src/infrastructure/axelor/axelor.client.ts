@@ -451,10 +451,14 @@ export function buildInstagramAccountConnectedUpdate(input: {
   accessToken: string;
   connectedAt: string;
   tokenExpiresAt?: string;
+  name?: string;
+  username?: string;
 }): Record<string, unknown> {
   return {
     instagramState: null,
     instagramUserId: input.instagramUserId,
+    ...(input.name ? { name: input.name } : {}),
+    ...(input.username ? { username: input.username } : {}),
     accessToken: input.accessToken,
     active: true,
     connectedAt: input.connectedAt,

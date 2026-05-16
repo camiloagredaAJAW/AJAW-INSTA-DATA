@@ -67,6 +67,34 @@ describe('InstagramOAuthClient', () => {
       error: { status: 400, message: 'access_token=[REDACTED] secret=[REDACTED] failed' },
     });
   });
+
+  it('fetches the Instagram professional profile used by webhooks', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { user_id: '17841410077817456', username: 'ajaw_ai', name: 'AJAW AI' } }),
+    );
+    const client = new InstagramOAuthClient(configService(), fetcher);
+
+    await expect(client.fetchProfile('long-lived-token')).resolves.toEqual({
+      userId: '17841410077817456',
+      username: 'ajaw_ai',
+      name: 'AJAW AI',
+    });
+
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.origin + url.pathname).toBe('https://graph.instagram.com/v25.0/me');
+    expect(url.searchParams.get('fields')).toBe('user_id,username,name');
+    expect(url.searchParams.get('access_token')).toBe('long-lived-token');
+    expect(fetcher.mock.calls[0][1]?.method).toBe('GET');
+  });
+
+  it('accepts Instagram profile responses wrapped in a data array', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { data: [{ user_id: '17841410077817456', username: 'ajaw_ai' }] } }),
+    );
+    const client = new InstagramOAuthClient(configService(), fetcher);
+
+    await expect(client.fetchProfile('token')).resolves.toEqual({ userId: '17841410077817456', username: 'ajaw_ai', name: undefined });
+  });
 });
 
 function configService(): ConfigService<EnvironmentConfig, true> {

@@ -50,13 +50,18 @@ describe('InstagramBusinessLoginService', () => {
 
   it('completes a valid callback, clears state, and persists connected account fields', async () => {
     const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
-    const oauth = oauthMock({ shortLived: { accessToken: 'short-token-secret', userId: '17841400000000000' } });
+    const oauth = oauthMock({
+      shortLived: { accessToken: 'short-token-secret', userId: '35972463999033656' },
+      profile: { userId: '17841410077817456', username: 'ajaw_ai', name: 'AJAW AI' },
+    });
     const service = new InstagramBusinessLoginService(configService(), axelor, oauth);
 
     await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toEqual({
       status: 'connected',
       instagramAccountId: 11,
-      instagramUserId: '17841400000000000',
+      instagramUserId: '17841410077817456',
+      username: 'ajaw_ai',
+      name: 'AJAW AI',
       tokenSource: 'short_lived',
       longLivedTokenExchange: { attempted: false, succeeded: false },
     });
@@ -67,11 +72,37 @@ describe('InstagramBusinessLoginService', () => {
       4,
       expect.objectContaining({
         instagramState: null,
-        instagramUserId: '17841400000000000',
+        instagramUserId: '17841410077817456',
+        username: 'ajaw_ai',
+        name: 'AJAW AI',
         accessToken: 'short-token-secret',
         active: true,
         connectedAt: expect.any(String),
       }),
+    );
+    expect(oauth.fetchProfile).toHaveBeenCalledWith('short-token-secret');
+  });
+
+  it('uses the long-lived token for profile lookup and persists the webhook-matching user_id', async () => {
+    const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
+    const oauth = oauthMock({
+      shortLived: { accessToken: 'short-token-secret', userId: '35972463999033656' },
+      longLived: { ok: true, token: { accessToken: 'long-token-secret', expiresIn: 5_184_000 } },
+      profile: { userId: '17841410077817456', username: 'ajaw_ai', name: 'AJAW AI' },
+    });
+    const service = new InstagramBusinessLoginService(configService({ INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: true }), axelor, oauth);
+
+    await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toMatchObject({
+      instagramUserId: '17841410077817456',
+      tokenSource: 'long_lived',
+      longLivedTokenExchange: { attempted: true, succeeded: true },
+    });
+
+    expect(oauth.fetchProfile).toHaveBeenCalledWith('long-token-secret');
+    expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(
+      11,
+      4,
+      expect.objectContaining({ instagramUserId: '17841410077817456', accessToken: 'long-token-secret', username: 'ajaw_ai', name: 'AJAW AI' }),
     );
   });
 
@@ -88,6 +119,7 @@ describe('InstagramBusinessLoginService', () => {
       longLivedTokenExchange: { attempted: true, succeeded: false, error: { status: 400, message: 'redacted oauth failure' } },
     });
 
+    expect(oauth.fetchProfile).toHaveBeenCalledWith('short-token-secret');
     expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(11, 4, expect.objectContaining({ accessToken: 'short-token-secret' }));
   });
 
@@ -118,6 +150,7 @@ function oauthMock(options: OAuthMockOptions = {}) {
   return {
     exchangeCodeForShortLivedToken: jest.fn().mockResolvedValue(options.shortLived ?? { accessToken: 'short-token-secret', userId: '17841400000000000' }),
     tryExchangeLongLivedToken: jest.fn().mockResolvedValue(options.longLived ?? { ok: true, token: { accessToken: 'long-token-secret', expiresIn: 5_184_000 } }),
+    fetchProfile: jest.fn().mockResolvedValue(options.profile ?? { userId: '17841400000000000', username: 'test_user', name: 'Test User' }),
   } as unknown as jest.Mocked<InstagramOAuthClient>;
 }
 
@@ -143,4 +176,5 @@ interface AxelorMockOptions {
 interface OAuthMockOptions {
   shortLived?: { accessToken: string; userId: string };
   longLived?: { ok: true; token: { accessToken: string; expiresIn?: number } } | { ok: false; error: { status?: number; message: string } };
+  profile?: { userId: string; username?: string; name?: string };
 }

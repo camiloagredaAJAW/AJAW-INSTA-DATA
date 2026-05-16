@@ -21,6 +21,12 @@ export interface InstagramLongLivedTokenResponse {
   expiresIn?: number;
 }
 
+export interface InstagramProfileResponse {
+  userId: string;
+  username?: string;
+  name?: string;
+}
+
 export type InstagramLongLivedTokenResult =
   | { ok: true; token: InstagramLongLivedTokenResponse }
   | { ok: false; error: SafeInstagramOAuthError };
@@ -87,6 +93,19 @@ export class InstagramOAuthClient {
     }
   }
 
+  async fetchProfile(accessToken: string): Promise<InstagramProfileResponse> {
+    const url = new URL('https://graph.instagram.com/v25.0/me');
+    url.searchParams.set('fields', 'user_id,username,name');
+    url.searchParams.set('access_token', accessToken);
+
+    const response = await this.fetcher(url.toString(), { method: 'GET' });
+    if (!response.ok) {
+      throw new Error(`Instagram profile lookup failed: ${await safeErrorMessage(response)}`);
+    }
+
+    return parseProfileResponse(await response.json());
+  }
+
   private getRequiredConfig(key: 'META_APP_ID' | 'META_APP_SECRET'): string {
     const value = this.configService.get(key, { infer: true });
     if (!value) {
@@ -127,6 +146,36 @@ function parseLongLivedTokenResponse(body: unknown): InstagramLongLivedTokenResp
     tokenType: typeof body.token_type === 'string' ? body.token_type : undefined,
     expiresIn: typeof body.expires_in === 'number' ? body.expires_in : undefined,
   };
+}
+
+function parseProfileResponse(body: unknown): InstagramProfileResponse {
+  const record = unwrapProfileRecord(body);
+  if (!isRecord(record)) {
+    throw new Error('Instagram profile response was missing required fields');
+  }
+
+  const userId = typeof record.user_id === 'string' ? record.user_id : typeof record.user_id === 'number' ? String(record.user_id) : undefined;
+  if (!userId) {
+    throw new Error('Instagram profile response was missing required fields');
+  }
+
+  return {
+    userId,
+    username: typeof record.username === 'string' ? record.username : undefined,
+    name: typeof record.name === 'string' ? record.name : undefined,
+  };
+}
+
+function unwrapProfileRecord(body: unknown): unknown {
+  if (!isRecord(body)) {
+    return body;
+  }
+
+  if (Array.isArray(body.data)) {
+    return body.data[0];
+  }
+
+  return body;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

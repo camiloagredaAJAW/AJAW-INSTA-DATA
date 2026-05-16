@@ -81,22 +81,27 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
     const longLivedToken = longLivedTokenExchange.result?.ok ? longLivedTokenExchange.result.token : null;
     const accessToken = longLivedToken?.accessToken ?? shortLivedToken.accessToken;
     const tokenExpiresAt = longLivedToken?.expiresIn ? new Date(Date.now() + longLivedToken.expiresIn * 1000).toISOString() : undefined;
+    const profile = await this.instagramOAuthClient.fetchProfile(accessToken);
 
     await this.axelorClient.updateInstagramAccount(
       instagramAccount.id,
       instagramAccount.version,
       buildInstagramAccountConnectedUpdate({
-        instagramUserId: shortLivedToken.userId,
+        instagramUserId: profile.userId,
         accessToken,
         connectedAt,
         tokenExpiresAt,
+        name: profile.name,
+        username: profile.username,
       }),
     );
 
     return {
       status: 'connected',
       instagramAccountId: instagramAccount.id,
-      instagramUserId: shortLivedToken.userId,
+      instagramUserId: profile.userId,
+      name: profile.name,
+      username: profile.username,
       tokenSource: longLivedToken ? 'long_lived' : 'short_lived',
       longLivedTokenExchange: longLivedTokenExchange.metadata,
     };
