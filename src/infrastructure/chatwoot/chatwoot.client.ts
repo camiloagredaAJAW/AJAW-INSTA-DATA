@@ -281,7 +281,7 @@ function parseInbox(body: unknown): ChatwootApiChannelSummary {
 }
 
 function parseIdSummary<T extends { id: number; source_id?: string; identifier?: string }>(body: unknown, missingIdMessage: string): T {
-  const record = unwrapPayload(body);
+  const record = unwrapIdRecord(body);
   if (!isRecord(record) || typeof record.id !== 'number') {
     throw new Error(missingIdMessage);
   }
@@ -293,12 +293,35 @@ function parseIdSummary<T extends { id: number; source_id?: string; identifier?:
   } as T;
 }
 
+function unwrapIdRecord(body: unknown): unknown {
+  const payload = unwrapPayload(body);
+  if (isRecord(payload) && typeof payload.id === 'number') {
+    return payload;
+  }
+
+  if (Array.isArray(payload) && isRecord(payload[0])) {
+    return payload[0];
+  }
+
+  if (isRecord(payload) && isRecord(payload.contact)) {
+    return payload.contact;
+  }
+
+  return payload;
+}
+
 function unwrapPayload(body: unknown): unknown {
   if (!isRecord(body)) {
     return body;
   }
+  if (Array.isArray(body.payload)) {
+    return body.payload;
+  }
   if (isRecord(body.payload)) {
     return body.payload;
+  }
+  if (Array.isArray(body.data)) {
+    return body.data;
   }
   if (isRecord(body.data)) {
     return body.data;

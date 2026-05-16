@@ -151,6 +151,36 @@ describe('DefaultChatwootClient', () => {
     ]);
     expect(JSON.parse(String(fetcher.mock.calls[3][1]?.body))).toEqual({ content: 'Hello', source_id: 'ig:event:mid-1', message_type: 'incoming' });
   });
+
+  it('accepts Chatwoot contact create responses that wrap the contact in a payload array', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { payload: [{ id: 10, identifier: 'instagram:user:sender-1' }] } }),
+    );
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(
+      client.createContact(1, 'token', {
+        identifier: 'instagram:user:sender-1',
+        name: 'Instagram user sender-1',
+        additional_attributes: { instagram_sender_id: 'sender-1' },
+      }),
+    ).resolves.toEqual({ id: 10, identifier: 'instagram:user:sender-1', source_id: undefined });
+  });
+
+  it('accepts Chatwoot contact create responses that wrap the contact object under payload.contact', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { payload: { contact: { id: 10, identifier: 'instagram:user:sender-1' } } } }),
+    );
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(
+      client.createContact(1, 'token', {
+        identifier: 'instagram:user:sender-1',
+        name: 'Instagram user sender-1',
+        additional_attributes: { instagram_sender_id: 'sender-1' },
+      }),
+    ).resolves.toEqual({ id: 10, identifier: 'instagram:user:sender-1', source_id: undefined });
+  });
 });
 
 function response({ ok = true, status = 200, body = {} }: { ok?: boolean; status?: number; body?: unknown }) {
