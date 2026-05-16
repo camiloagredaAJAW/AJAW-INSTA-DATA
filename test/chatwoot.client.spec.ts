@@ -165,6 +165,18 @@ describe('DefaultChatwootClient', () => {
     expect(fetcher.mock.calls[0][0]).toBe('https://chatwoot.test/api/v1/accounts/1/contacts/search?q=instagram%3Auser%3Asender-1');
   });
 
+  it('reports non-secret Chatwoot endpoint diagnostics for failed API requests', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(response({ ok: false, status: 404, body: {} }));
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.createConversation(1, 'secret-token', { inbox_id: 100, contact_id: 10, source_id: 'ig:dm:account-1:sender-1' })).rejects.toThrow(
+      'Chatwoot API request failed: method=POST path=/api/v1/accounts/1/conversations status=404',
+    );
+    await expect(client.createConversation(1, 'secret-token', { inbox_id: 100, contact_id: 10, source_id: 'ig:dm:account-1:sender-1' })).rejects.not.toThrow(
+      'secret-token',
+    );
+  });
+
   it('accepts Chatwoot contact create responses that wrap the contact in a payload array', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
       response({ body: { payload: [{ id: 10, identifier: 'instagram:user:sender-1' }] } }),

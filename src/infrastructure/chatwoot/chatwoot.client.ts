@@ -157,13 +157,14 @@ export class DefaultChatwootClient {
   }
 
   async searchContacts(accountId: number, apiAccessToken: string, query: string): Promise<ChatwootContactSummary[]> {
-    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, `/api/v1/accounts/${accountId}/contacts/search?q=${encodeURIComponent(query)}`), {
+    const path = `/api/v1/accounts/${accountId}/contacts/search`;
+    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, `${path}?q=${encodeURIComponent(query)}`), {
       method: 'GET',
       headers: buildChatwootAuthHeaders(apiAccessToken),
     });
 
     if (!response.ok) {
-      throw new Error(`Chatwoot contact search request failed with status ${response.status}`);
+      throw new Error(`Chatwoot contact search request failed: method=GET path=${path} status=${response.status}`);
     }
 
     return parseContactList(await response.json());
@@ -209,7 +210,7 @@ export class DefaultChatwootClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Chatwoot API request failed with status ${response.status}`);
+      throw new Error(`Chatwoot API request failed: method=POST path=/api/v1/accounts/${accountId}${path} status=${response.status}`);
     }
 
     return response;
