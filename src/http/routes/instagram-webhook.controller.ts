@@ -29,12 +29,18 @@ export class InstagramWebhookController {
     @Query('state') state: string | undefined,
   ): Promise<string | InstagramCallbackResult> {
     if (challenge !== undefined) {
+      this.logger.log('Instagram webhook verification GET received');
       return this.verify(mode, verifyToken, challenge);
     }
 
     if (code !== undefined && state !== undefined) {
       try {
-        return await this.instagramBusinessLogin.completeCallback({ code, state });
+        this.logger.log(`Instagram OAuth callback received: state=${state}`);
+        const result = await this.instagramBusinessLogin.completeCallback({ code, state });
+        this.logger.log(
+          `Instagram OAuth callback completed: instagramAccountId=${result.instagramAccountId} instagramUserId=${result.instagramUserId} tokenSource=${result.tokenSource}`,
+        );
+        return result;
       } catch (error) {
         if (error instanceof InstagramBusinessLoginError) {
           if (error.status === 'unauthorized') {

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Headers, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Logger, Post, Query, Res, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { ActivateInstagramIntegrationService } from '../../application/activateInstagramIntegration';
@@ -11,6 +11,8 @@ interface ActivateInstagramDto {
 
 @Controller('integrations/instagram')
 export class IntegrationsController {
+  private readonly logger = new Logger(IntegrationsController.name);
+
   constructor(
     private readonly configService: ConfigService<EnvironmentConfig, true>,
     private readonly activateInstagramIntegration: ActivateInstagramIntegrationService,
@@ -30,7 +32,9 @@ export class IntegrationsController {
     }
 
     try {
+      this.logger.log(`Instagram login start requested: agentId=${agentId}`);
       const result = await this.instagramBusinessLogin.start({ agentId });
+      this.logger.log(`Instagram login redirect generated: agentId=${agentId} instagramAccountId=${result.instagramAccountId}`);
       response.redirect(result.authorizeUrl);
     } catch (error) {
       if (error instanceof InstagramBusinessLoginError || (error instanceof Error && error.message.includes('agentId'))) {
