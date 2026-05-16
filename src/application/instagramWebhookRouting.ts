@@ -59,14 +59,15 @@ export class InstagramWebhookRoutingService {
           continue;
         }
 
-        if (!isRoutableInstagramAccount(account)) {
+        const routableAccount = await this.resolveRoutableAccount(account);
+        if (!routableAccount) {
           const reason = routingPreconditionFailure(account);
           failures.push({ sourceEventId: event.sourceEventId, classification: 'non_retriable', reason });
           this.logger.warn(`Instagram webhook event not routed: kind=${event.kind} sourceEventId=${event.sourceEventId} reason=${reason}`);
           continue;
         }
 
-        const delivered = await this.deliverEvent(event, account);
+        const delivered = await this.deliverEvent(event, routableAccount);
         processed.push(delivered);
         this.logger.log(
           `Instagram webhook event routed: kind=${event.kind} sourceEventId=${event.sourceEventId} conversationSourceId=${delivered.conversationSourceId}`,
@@ -128,6 +129,27 @@ export class InstagramWebhookRoutingService {
     });
 
     return { kind: event.kind, sourceEventId: event.sourceEventId, conversationSourceId, messageSourceId };
+  }
+
+  private async resolveRoutableAccount(account: AxelorInstagramAccountRecord | null): Promise<RoutableInstagramAccount | null> {
+    if (isRoutableInstagramAccount(account)) {
+      return account;
+    }
+
+    if (!account || account.chatwootIntegrationStatus && account.chatwootIntegrationStatus !== IntegrationStatus.Active) {
+      return null;
+    }
+
+    if (!toPositiveIntegerOrNull(account.chatwootAccountId) || !toPositiveIntegerOrNull(account.chatwootInboxId) || !account.agent?.id) {
+      return null;
+    }
+
+    const agent = await this.axelorClient.fetchAgent(account.agent.id);
+    if (!agent?.chatwootApiKey) {
+      return null;
+    }
+
+    return { ...account, agent: { ...account.agent, chatwootApiKey: agent.chatwootApiKey } };
   }
 }
 

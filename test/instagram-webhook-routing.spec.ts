@@ -66,6 +66,17 @@ describe('InstagramWebhookRoutingService', () => {
     expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 30, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
   });
 
+  it('fetches the Agent when webhook search does not expand chatwootApiKey', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, agent: { id: 7 } }, { id: 7, chatwootApiKey: 'agent-secret' });
+    const chatwootClient = chatwootMock();
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient);
+
+    await expect(service.route({ payload: dmPayload() })).resolves.toMatchObject({ status: 'processed', failures: [] });
+
+    expect(axelorClient.fetchAgent).toHaveBeenCalledWith(7);
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 30, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
+  });
+
   it('classifies exposed missing Instagram scopes as non-retriable without leaking tokens', async () => {
     const axelorClient = axelorMock({
       id: 11,
@@ -170,10 +181,14 @@ function commentPayload() {
   };
 }
 
-function axelorMock(account: Awaited<ReturnType<DefaultAxelorClient['findInstagramAccountByInstagramUserId']>>) {
+function axelorMock(
+  account: Awaited<ReturnType<DefaultAxelorClient['findInstagramAccountByInstagramUserId']>>,
+  agent: Awaited<ReturnType<DefaultAxelorClient['fetchAgent']>> = null,
+) {
   return {
     login: jest.fn().mockResolvedValue({ jsessionId: 'session-id' }),
     findInstagramAccountByInstagramUserId: jest.fn().mockResolvedValue(account),
+    fetchAgent: jest.fn().mockResolvedValue(agent),
   } as unknown as jest.Mocked<DefaultAxelorClient>;
 }
 
