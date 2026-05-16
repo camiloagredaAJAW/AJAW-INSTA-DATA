@@ -45,7 +45,7 @@ export interface ChatwootContactInboxLink {
 }
 
 export interface ChatwootContactInboxSummary {
-  id: number;
+  id?: number;
   source_id?: string;
 }
 
@@ -171,8 +171,11 @@ export class DefaultChatwootClient {
   }
 
   async createContactInbox(accountId: number, apiAccessToken: string, payload: CreateChatwootContactInboxPayload): Promise<ChatwootContactInboxSummary> {
-    const response = await this.postJson(accountId, apiAccessToken, '/contact_inboxes', payload);
-    return parseIdSummary(await response.json(), 'Chatwoot contact_inbox response is missing id');
+    const response = await this.postJson(accountId, apiAccessToken, `/contacts/${payload.contact_id}/contact_inboxes`, {
+      inbox_id: payload.inbox_id,
+      source_id: payload.source_id,
+    });
+    return parseContactInboxSummary(await response.json());
   }
 
   async createConversation(accountId: number, apiAccessToken: string, payload: CreateChatwootConversationPayload): Promise<ChatwootConversationSummary> {
@@ -335,6 +338,23 @@ function parseContactList(body: unknown): ChatwootContactSummary[] {
       },
     ];
   });
+}
+
+function parseContactInboxSummary(body: unknown): ChatwootContactInboxSummary {
+  const record = unwrapIdRecord(body);
+  if (!isRecord(record)) {
+    throw new Error('Chatwoot contact_inbox response is missing source_id');
+  }
+
+  const sourceId = optionalString(record.source_id);
+  if (!sourceId) {
+    throw new Error('Chatwoot contact_inbox response is missing source_id');
+  }
+
+  return {
+    id: optionalNumber(record.id),
+    source_id: sourceId,
+  };
 }
 
 function parseContactInboxLinks(value: unknown): ChatwootContactInboxLink[] | undefined {

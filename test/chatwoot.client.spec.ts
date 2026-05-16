@@ -146,7 +146,7 @@ describe('DefaultChatwootClient', () => {
 
     expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
       'https://chatwoot.test/api/v1/accounts/1/contacts',
-      'https://chatwoot.test/api/v1/accounts/1/contact_inboxes',
+      'https://chatwoot.test/api/v1/accounts/1/contacts/10/contact_inboxes',
       'https://chatwoot.test/api/v1/accounts/1/conversations',
       'https://chatwoot.test/api/v1/accounts/1/conversations/30/messages',
     ]);
@@ -163,6 +163,20 @@ describe('DefaultChatwootClient', () => {
       { id: 10, identifier: 'instagram:user:sender-1', contact_inboxes: [{ source_id: 'ig:account-1:user:sender-1', inbox: { id: 100 } }] },
     ]);
     expect(fetcher.mock.calls[0][0]).toBe('https://chatwoot.test/api/v1/accounts/1/contacts/search?q=instagram%3Auser%3Asender-1');
+  });
+
+  it('creates contact inboxes through the nested Chatwoot contact endpoint', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { source_id: 'ig:account-1:user:sender-1', inbox: { id: 100 } } }),
+    );
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.createContactInbox(1, 'token', { contact_id: 10, inbox_id: 100, source_id: 'ig:account-1:user:sender-1' })).resolves.toEqual({
+      id: undefined,
+      source_id: 'ig:account-1:user:sender-1',
+    });
+    expect(fetcher.mock.calls[0][0]).toBe('https://chatwoot.test/api/v1/accounts/1/contacts/10/contact_inboxes');
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ inbox_id: 100, source_id: 'ig:account-1:user:sender-1' });
   });
 
   it('reports non-secret Chatwoot endpoint diagnostics for failed API requests', async () => {
