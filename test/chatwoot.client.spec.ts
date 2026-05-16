@@ -122,6 +122,7 @@ describe('DefaultChatwootClient', () => {
 
     await expect(
       client.createContact(1, 'token', {
+        inbox_id: 100,
         identifier: 'instagram:user:sender-1',
         name: 'Instagram user sender-1',
         additional_attributes: { instagram_sender_id: 'sender-1' },
@@ -152,6 +153,18 @@ describe('DefaultChatwootClient', () => {
     expect(JSON.parse(String(fetcher.mock.calls[3][1]?.body))).toEqual({ content: 'Hello', source_id: 'ig:event:mid-1', message_type: 'incoming' });
   });
 
+  it('searches contacts and preserves contact inbox links', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { payload: [{ id: 10, identifier: 'instagram:user:sender-1', contact_inboxes: [{ source_id: 'ig:account-1:user:sender-1', inbox: { id: 100 } }] }] } }),
+    );
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.searchContacts(1, 'token', 'instagram:user:sender-1')).resolves.toEqual([
+      { id: 10, identifier: 'instagram:user:sender-1', contact_inboxes: [{ source_id: 'ig:account-1:user:sender-1', inbox: { id: 100 } }] },
+    ]);
+    expect(fetcher.mock.calls[0][0]).toBe('https://chatwoot.test/api/v1/accounts/1/contacts/search?q=instagram%3Auser%3Asender-1');
+  });
+
   it('accepts Chatwoot contact create responses that wrap the contact in a payload array', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
       response({ body: { payload: [{ id: 10, identifier: 'instagram:user:sender-1' }] } }),
@@ -160,6 +173,7 @@ describe('DefaultChatwootClient', () => {
 
     await expect(
       client.createContact(1, 'token', {
+        inbox_id: 100,
         identifier: 'instagram:user:sender-1',
         name: 'Instagram user sender-1',
         additional_attributes: { instagram_sender_id: 'sender-1' },
@@ -175,6 +189,7 @@ describe('DefaultChatwootClient', () => {
 
     await expect(
       client.createContact(1, 'token', {
+        inbox_id: 100,
         identifier: 'instagram:user:sender-1',
         name: 'Instagram user sender-1',
         additional_attributes: { instagram_sender_id: 'sender-1' },

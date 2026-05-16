@@ -36,6 +36,12 @@ export interface CreateChatwootApiInboxPayload {
 export interface ChatwootContactSummary {
   id: number;
   identifier?: string;
+  contact_inboxes?: ChatwootContactInboxLink[];
+}
+
+export interface ChatwootContactInboxLink {
+  source_id?: string;
+  inbox?: { id?: number };
 }
 
 export interface ChatwootContactInboxSummary {
@@ -54,6 +60,7 @@ export interface ChatwootMessageSummary {
 }
 
 export interface CreateChatwootContactPayload {
+  inbox_id: number;
   identifier: string;
   name: string;
   additional_attributes?: Record<string, unknown>;
@@ -147,6 +154,19 @@ export class DefaultChatwootClient {
   async createContact(accountId: number, apiAccessToken: string, payload: CreateChatwootContactPayload): Promise<ChatwootContactSummary> {
     const response = await this.postJson(accountId, apiAccessToken, '/contacts', payload);
     return parseIdSummary(await response.json(), 'Chatwoot contact response is missing id');
+  }
+
+  async searchContacts(accountId: number, apiAccessToken: string, query: string): Promise<ChatwootContactSummary[]> {
+    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, `/api/v1/accounts/${accountId}/contacts/search?q=${encodeURIComponent(query)}`), {
+      method: 'GET',
+      headers: buildChatwootAuthHeaders(apiAccessToken),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chatwoot contact search request failed with status ${response.status}`);
+    }
+
+    return parseContactList(await response.json());
   }
 
   async createContactInbox(accountId: number, apiAccessToken: string, payload: CreateChatwootContactInboxPayload): Promise<ChatwootContactInboxSummary> {
@@ -286,11 +306,49 @@ function parseIdSummary<T extends { id: number; source_id?: string; identifier?:
     throw new Error(missingIdMessage);
   }
 
+  const contactInboxes = parseContactInboxLinks(record.contact_inboxes);
   return {
     id: record.id,
     source_id: optionalString(record.source_id),
     identifier: optionalString(record.identifier),
+    ...(contactInboxes ? { contact_inboxes: contactInboxes } : {}),
   } as T;
+}
+
+function parseContactList(body: unknown): ChatwootContactSummary[] {
+  const payload = unwrapPayload(body);
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.flatMap((item) => {
+    if (!isRecord(item) || typeof item.id !== 'number') {
+      return [];
+    }
+
+    return [
+      {
+        id: item.id,
+        identifier: optionalString(item.identifier),
+        contact_inboxes: parseContactInboxLinks(item.contact_inboxes),
+      },
+    ];
+  });
+}
+
+function parseContactInboxLinks(value: unknown): ChatwootContactInboxLink[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value.flatMap((item) => {
+    if (!isRecord(item)) {
+      return [];
+    }
+
+    const inbox = isRecord(item.inbox) ? { id: optionalNumber(item.inbox.id) } : undefined;
+    return [{ source_id: optionalString(item.source_id), inbox }];
+  });
 }
 
 function unwrapIdRecord(body: unknown): unknown {

@@ -14,6 +14,7 @@ describe('App foundation', () => {
     findInstagramAccountByInstagramUserId: jest.Mock;
   };
   let chatwootClient: {
+    searchContacts: jest.Mock;
     createContact: jest.Mock;
     createContactInbox: jest.Mock;
     createConversation: jest.Mock;
@@ -36,6 +37,7 @@ describe('App foundation', () => {
       }),
     };
     chatwootClient = {
+      searchContacts: jest.fn().mockResolvedValue([]),
       createContact: jest.fn().mockResolvedValue({ id: 101, identifier: 'instagram:user:123456789' }),
       createContactInbox: jest.fn().mockResolvedValue({ id: 202, source_id: 'ig:17841400000000000:user:123456789' }),
       createConversation: jest.fn().mockResolvedValue({ id: 303, source_id: 'ig:dm:17841400000000000:123456789' }),

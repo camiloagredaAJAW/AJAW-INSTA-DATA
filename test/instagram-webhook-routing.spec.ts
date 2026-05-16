@@ -45,7 +45,8 @@ describe('InstagramWebhookRoutingService', () => {
       failures: [],
     });
 
-    expect(chatwootClient.createContact).toHaveBeenCalledWith(1, 'agent-secret', expect.objectContaining({ identifier: 'instagram:user:sender-1' }));
+    expect(chatwootClient.searchContacts).toHaveBeenCalledWith(1, 'agent-secret', 'instagram:user:sender-1');
+    expect(chatwootClient.createContact).toHaveBeenCalledWith(1, 'agent-secret', expect.objectContaining({ inbox_id: 100, identifier: 'instagram:user:sender-1' }));
     expect(chatwootClient.createContactInbox).toHaveBeenCalledWith(1, 'agent-secret', expect.objectContaining({ source_id: 'ig:ig-account-1:user:sender-1' }));
     expect(chatwootClient.createConversation).toHaveBeenCalledWith(1, 'agent-secret', expect.objectContaining({ source_id: 'ig:dm:ig-account-1:sender-1' }));
     expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 30, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
@@ -64,6 +65,21 @@ describe('InstagramWebhookRoutingService', () => {
 
     await expect(service.route({ payload: dmPayload() })).resolves.toMatchObject({ status: 'processed', failures: [] });
     expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 30, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
+  });
+
+  it('reuses an existing Chatwoot contact and contact inbox when the sender was already created', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    chatwootClient.searchContacts.mockResolvedValueOnce([
+      { id: 10, identifier: 'instagram:user:sender-1', contact_inboxes: [{ source_id: 'ig:ig-account-1:user:sender-1', inbox: { id: 100 } }] },
+    ]);
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient);
+
+    await expect(service.route({ payload: dmPayload() })).resolves.toMatchObject({ status: 'processed', failures: [] });
+
+    expect(chatwootClient.createContact).not.toHaveBeenCalled();
+    expect(chatwootClient.createContactInbox).not.toHaveBeenCalled();
+    expect(chatwootClient.createConversation).toHaveBeenCalledWith(1, 'agent-secret', expect.objectContaining({ contact_id: 10 }));
   });
 
   it('fetches the Agent when webhook search does not expand chatwootApiKey', async () => {
@@ -194,6 +210,7 @@ function axelorMock(
 
 function chatwootMock() {
   return {
+    searchContacts: jest.fn().mockResolvedValue([]),
     createContact: jest.fn().mockResolvedValue({ id: 10 }),
     createContactInbox: jest.fn().mockResolvedValue({ id: 20 }),
     createConversation: jest.fn().mockResolvedValue({ id: 30 }),

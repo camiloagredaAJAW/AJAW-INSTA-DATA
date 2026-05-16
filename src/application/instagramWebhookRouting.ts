@@ -102,19 +102,15 @@ export class InstagramWebhookRoutingService {
     const conversationSourceId = buildConversationSourceId(event);
     const messageSourceId = buildMessageSourceId(event.sourceEventId);
 
-    const contact = await this.chatwootClient.createContact(chatwootAccountId, apiKey, {
-      identifier: contactSourceId,
-      name: event.senderName ?? `Instagram user ${event.senderId}`,
-      additional_attributes: {
-        instagram_sender_id: event.senderId,
-        instagram_account_id: event.instagramAccountId,
-      },
-    });
-    const contactInbox = await this.chatwootClient.createContactInbox(chatwootAccountId, apiKey, {
-      contact_id: contact.id,
-      inbox_id: chatwootInboxId,
-      source_id: contactInboxSourceId,
-    });
+    const contact = await this.findOrCreateContact(chatwootAccountId, apiKey, chatwootInboxId, contactSourceId, event);
+    const existingContactInboxSourceId = contact.contact_inboxes?.find((link) => link.inbox?.id === chatwootInboxId)?.source_id;
+    const contactInbox = existingContactInboxSourceId
+      ? { id: undefined, source_id: existingContactInboxSourceId }
+      : await this.chatwootClient.createContactInbox(chatwootAccountId, apiKey, {
+          contact_id: contact.id,
+          inbox_id: chatwootInboxId,
+          source_id: contactInboxSourceId,
+        });
     const conversation = await this.chatwootClient.createConversation(chatwootAccountId, apiKey, {
       inbox_id: chatwootInboxId,
       contact_id: contact.id,
@@ -129,6 +125,30 @@ export class InstagramWebhookRoutingService {
     });
 
     return { kind: event.kind, sourceEventId: event.sourceEventId, conversationSourceId, messageSourceId };
+  }
+
+  private async findOrCreateContact(
+    chatwootAccountId: number,
+    apiKey: string,
+    chatwootInboxId: number,
+    contactSourceId: string,
+    event: NormalizedInstagramWebhookEvent,
+  ) {
+    const contacts = await this.chatwootClient.searchContacts(chatwootAccountId, apiKey, contactSourceId);
+    const existingContact = contacts.find((contact) => contact.identifier === contactSourceId);
+    if (existingContact) {
+      return existingContact;
+    }
+
+    return this.chatwootClient.createContact(chatwootAccountId, apiKey, {
+      inbox_id: chatwootInboxId,
+      identifier: contactSourceId,
+      name: event.senderName ?? `Instagram user ${event.senderId}`,
+      additional_attributes: {
+        instagram_sender_id: event.senderId,
+        instagram_account_id: event.instagramAccountId,
+      },
+    });
   }
 
   private async resolveRoutableAccount(account: AxelorInstagramAccountRecord | null): Promise<RoutableInstagramAccount | null> {
