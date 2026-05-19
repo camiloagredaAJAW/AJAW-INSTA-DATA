@@ -118,6 +118,7 @@ export class InstagramWebhookRoutingService {
     await this.chatwootClient.createIncomingMessage(chatwootAccountId, apiKey, conversation.id, {
       content: buildVisibleMessageContent(event),
       source_id: messageSourceId,
+      message_type: event.direction,
       content_attributes: buildMessageAttributes(event),
     });
 
@@ -261,11 +262,15 @@ function normalizeMessagingEvents(entry: Record<string, unknown>, instagramAccou
   return entry.messaging.filter(isRecord).flatMap((messaging) => {
     const message = isRecord(messaging.message) ? messaging.message : undefined;
     const sender = isRecord(messaging.sender) ? messaging.sender : undefined;
+    const recipient = isRecord(messaging.recipient) ? messaging.recipient : undefined;
     const senderId = stringValue(sender?.id);
+    const recipientId = stringValue(recipient?.id);
     const sourceEventId = stringValue(message?.mid) ?? stringValue(messaging.mid);
     const text = stringValue(message?.text) ?? firstAttachmentText(message?.attachments) ?? '';
+    const isOutgoing = senderId === instagramAccountId || message?.is_echo === true;
+    const contactUserId = isOutgoing ? recipientId : senderId;
 
-    if (!senderId || !sourceEventId || !text) {
+    if (!contactUserId || !sourceEventId || !text) {
       return [];
     }
 
@@ -273,7 +278,8 @@ function normalizeMessagingEvents(entry: Record<string, unknown>, instagramAccou
       {
         kind: 'dm',
         instagramAccountId,
-        senderId,
+        direction: isOutgoing ? 'outgoing' : 'incoming',
+        senderId: contactUserId,
         sourceEventId,
         text,
         occurredAt: timestampValue(messaging.timestamp),
@@ -308,6 +314,7 @@ function normalizeCommentChanges(entry: Record<string, unknown>, instagramAccoun
       {
         kind: 'comment',
         instagramAccountId,
+        direction: 'incoming',
         senderId,
         senderName: stringValue(from?.username) ?? stringValue(from?.name),
         sourceEventId,

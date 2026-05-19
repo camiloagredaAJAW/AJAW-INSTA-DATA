@@ -110,6 +110,26 @@ describe('InstagramWebhookRoutingService', () => {
     expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 55, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
   });
 
+  it('routes Instagram echo messages as outgoing messages for the recipient contact', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    chatwootClient.searchContacts.mockResolvedValueOnce([
+      { id: 10, identifier: 'instagram:user:sender-1', name: 'Peter Chang', contact_inboxes: [{ source_id: 'ig:ig-account-1:user:sender-1', inbox: { id: 100 } }] },
+    ]);
+    chatwootClient.listContactConversations.mockResolvedValueOnce([{ id: 55, inbox_id: 100, status: 'open', source_id: 'ig:ig-account-1:user:sender-1' }]);
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock());
+
+    await expect(service.route({ payload: outgoingDmPayload() })).resolves.toMatchObject({ status: 'processed', failures: [] });
+
+    expect(chatwootClient.searchContacts).toHaveBeenCalledWith(1, 'agent-secret', 'instagram:user:sender-1');
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(
+      1,
+      'agent-secret',
+      55,
+      expect.objectContaining({ content: 'hola muy bien', message_type: 'outgoing', source_id: 'ig:event:mid-out-1' }),
+    );
+  });
+
   it('updates an existing generic Chatwoot contact with Instagram sender profile details', async () => {
     const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();
@@ -201,6 +221,12 @@ describe('InstagramWebhookRoutingService', () => {
     );
   });
 
+  it('normalizes Instagram echo webhook payloads as outgoing DMs for the recipient user', () => {
+    expect(normalizeInstagramWebhookPayload(outgoingDmPayload())).toEqual([
+      expect.objectContaining({ direction: 'outgoing', senderId: 'sender-1', sourceEventId: 'mid-out-1', text: 'hola muy bien' }),
+    ]);
+  });
+
   it('classifies missing linked accounts as non-retriable and skips Chatwoot calls', async () => {
     const axelorClient = axelorMock(null);
     const chatwootClient = chatwootMock();
@@ -230,6 +256,13 @@ describe('InstagramWebhookRoutingService', () => {
 
 function dmPayload() {
   return { object: 'instagram', entry: [{ id: 'ig-account-1', messaging: [{ sender: { id: 'sender-1' }, message: { mid: 'mid-1', text: 'Hello DM' } }] }] };
+}
+
+function outgoingDmPayload() {
+  return {
+    object: 'instagram',
+    entry: [{ id: 'ig-account-1', messaging: [{ sender: { id: 'ig-account-1' }, recipient: { id: 'sender-1' }, message: { mid: 'mid-out-1', text: 'hola muy bien', is_echo: true } }] }],
+  };
 }
 
 function commentPayload() {

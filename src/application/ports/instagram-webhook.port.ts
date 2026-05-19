@@ -7,6 +7,7 @@ export interface InstagramWebhookRouteRequest {
 export interface NormalizedInstagramWebhookEvent {
   kind: InstagramWebhookEventKind;
   instagramAccountId: string;
+  direction: 'incoming' | 'outgoing';
   senderId: string;
   senderName?: string;
   sourceEventId: string;

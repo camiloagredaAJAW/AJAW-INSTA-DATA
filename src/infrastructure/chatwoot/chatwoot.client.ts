@@ -93,6 +93,7 @@ export interface CreateChatwootConversationPayload {
 export interface CreateChatwootIncomingMessagePayload {
   content: string;
   source_id: string;
+  message_type?: 'incoming' | 'outgoing';
   content_attributes?: Record<string, unknown>;
 }
 
@@ -230,7 +231,7 @@ export class DefaultChatwootClient {
   ): Promise<ChatwootMessageSummary> {
     const response = await this.postJson(accountId, apiAccessToken, `/conversations/${conversationId}/messages`, {
       ...payload,
-      message_type: 'incoming',
+      message_type: payload.message_type ?? 'incoming',
     });
     return parseIdSummary(await response.json(), 'Chatwoot message response is missing id');
   }
