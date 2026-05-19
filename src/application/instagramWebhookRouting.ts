@@ -114,13 +114,7 @@ export class InstagramWebhookRoutingService {
           source_id: contactInboxSourceId,
         });
     const conversationSourceId = buildConversationSourceId(event, contactInbox.source_id ?? contactInboxSourceId);
-    const conversation = await this.chatwootClient.createConversation(chatwootAccountId, apiKey, {
-      inbox_id: chatwootInboxId,
-      contact_id: contact.id,
-      source_id: conversationSourceId,
-      contact_inbox_id: contactInbox.id,
-      custom_attributes: buildConversationAttributes(event),
-    });
+    const conversation = await this.findOrCreateConversation(chatwootAccountId, apiKey, chatwootInboxId, contact.id, contactInbox.id, event, conversationSourceId);
     await this.chatwootClient.createIncomingMessage(chatwootAccountId, apiKey, conversation.id, {
       content: buildVisibleMessageContent(event),
       source_id: messageSourceId,
@@ -128,6 +122,32 @@ export class InstagramWebhookRoutingService {
     });
 
     return { kind: event.kind, sourceEventId: event.sourceEventId, conversationSourceId, messageSourceId };
+  }
+
+  private async findOrCreateConversation(
+    chatwootAccountId: number,
+    apiKey: string,
+    chatwootInboxId: number,
+    contactId: number,
+    contactInboxId: number | undefined,
+    event: NormalizedInstagramWebhookEvent,
+    conversationSourceId: string,
+  ) {
+    if (event.kind === 'dm') {
+      const conversations = await this.chatwootClient.listContactConversations(chatwootAccountId, apiKey, contactId);
+      const existingConversation = conversations.find((conversation) => conversation.inbox_id === chatwootInboxId && conversation.status !== 'resolved');
+      if (existingConversation) {
+        return existingConversation;
+      }
+    }
+
+    return this.chatwootClient.createConversation(chatwootAccountId, apiKey, {
+      inbox_id: chatwootInboxId,
+      contact_id: contactId,
+      source_id: conversationSourceId,
+      contact_inbox_id: contactInboxId,
+      custom_attributes: buildConversationAttributes(event),
+    });
   }
 
   private async fetchSenderProfile(event: NormalizedInstagramWebhookEvent, account: RoutableInstagramAccount): Promise<InstagramMessagingUserProfileResponse> {

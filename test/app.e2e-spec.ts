@@ -17,6 +17,7 @@ describe('App foundation', () => {
     searchContacts: jest.Mock;
     createContact: jest.Mock;
     createContactInbox: jest.Mock;
+    listContactConversations: jest.Mock;
     createConversation: jest.Mock;
     createIncomingMessage: jest.Mock;
   };
@@ -40,6 +41,7 @@ describe('App foundation', () => {
       searchContacts: jest.fn().mockResolvedValue([]),
       createContact: jest.fn().mockResolvedValue({ id: 101, identifier: 'instagram:user:123456789' }),
       createContactInbox: jest.fn().mockResolvedValue({ id: 202, source_id: 'ig:17841400000000000:user:123456789' }),
+      listContactConversations: jest.fn().mockResolvedValue([]),
       createConversation: jest.fn().mockResolvedValue({ id: 303, source_id: 'ig:dm:17841400000000000:123456789' }),
       createIncomingMessage: jest.fn().mockResolvedValue({ id: 404, source_id: 'ig:event:m_abc123' }),
     };

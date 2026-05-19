@@ -95,6 +95,21 @@ describe('InstagramWebhookRoutingService', () => {
     expect(chatwootClient.createConversation).toHaveBeenCalledWith(1, 'agent-secret', expect.objectContaining({ contact_id: 10 }));
   });
 
+  it('adds new DM messages to the existing open Chatwoot conversation for the same contact and inbox', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    chatwootClient.searchContacts.mockResolvedValueOnce([
+      { id: 10, identifier: 'instagram:user:sender-1', name: 'Peter Chang', contact_inboxes: [{ source_id: 'ig:ig-account-1:user:sender-1', inbox: { id: 100 } }] },
+    ]);
+    chatwootClient.listContactConversations.mockResolvedValueOnce([{ id: 55, inbox_id: 100, status: 'open', source_id: 'ig:ig-account-1:user:sender-1' }]);
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock());
+
+    await expect(service.route({ payload: dmPayload() })).resolves.toMatchObject({ status: 'processed', failures: [] });
+
+    expect(chatwootClient.createConversation).not.toHaveBeenCalled();
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 55, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
+  });
+
   it('updates an existing generic Chatwoot contact with Instagram sender profile details', async () => {
     const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();
@@ -246,6 +261,7 @@ function chatwootMock() {
     createContact: jest.fn().mockResolvedValue({ id: 10 }),
     updateContact: jest.fn().mockResolvedValue(undefined),
     createContactInbox: jest.fn().mockResolvedValue({ id: 20 }),
+    listContactConversations: jest.fn().mockResolvedValue([]),
     createConversation: jest.fn().mockResolvedValue({ id: 30 }),
     createIncomingMessage: jest.fn().mockResolvedValue({ id: 40 }),
   } as unknown as jest.Mocked<DefaultChatwootClient>;

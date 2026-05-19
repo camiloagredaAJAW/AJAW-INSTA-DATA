@@ -190,6 +190,16 @@ describe('DefaultChatwootClient', () => {
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ name: 'Peter Chang', avatar_url: 'https://profile.test/peter.jpg' });
   });
 
+  it('lists contact conversations for reusing an open API channel conversation', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { payload: [{ id: 55, inbox_id: 100, status: 'open', source_id: 'ig:account-1:user:sender-1' }] } }),
+    );
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.listContactConversations(1, 'token', 10)).resolves.toEqual([{ id: 55, inbox_id: 100, status: 'open', source_id: 'ig:account-1:user:sender-1' }]);
+    expect(fetcher.mock.calls[0][0]).toBe('https://chatwoot.test/api/v1/accounts/1/contacts/10/conversations');
+  });
+
   it('reports non-secret Chatwoot endpoint diagnostics for failed API requests', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(response({ ok: false, status: 404, body: {} }));
     const client = new DefaultChatwootClient(configService(), fetcher);

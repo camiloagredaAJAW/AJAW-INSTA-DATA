@@ -53,6 +53,8 @@ export interface ChatwootContactInboxSummary {
 export interface ChatwootConversationSummary {
   id: number;
   source_id?: string;
+  inbox_id?: number;
+  status?: string;
 }
 
 export interface ChatwootMessageSummary {
@@ -204,6 +206,20 @@ export class DefaultChatwootClient {
   async createConversation(accountId: number, apiAccessToken: string, payload: CreateChatwootConversationPayload): Promise<ChatwootConversationSummary> {
     const response = await this.postJson(accountId, apiAccessToken, '/conversations', payload);
     return parseIdSummary(await response.json(), 'Chatwoot conversation response is missing id');
+  }
+
+  async listContactConversations(accountId: number, apiAccessToken: string, contactId: number): Promise<ChatwootConversationSummary[]> {
+    const path = `/api/v1/accounts/${accountId}/contacts/${contactId}/conversations`;
+    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, path), {
+      method: 'GET',
+      headers: buildChatwootAuthHeaders(apiAccessToken),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chatwoot contact conversations request failed: method=GET path=${path} status=${response.status}`);
+    }
+
+    return parseConversationList(await response.json());
   }
 
   async createIncomingMessage(
@@ -381,6 +397,32 @@ function parseContactInboxSummary(body: unknown): ChatwootContactInboxSummary {
   return {
     id: optionalNumber(record.id),
     source_id: sourceId,
+  };
+}
+
+function parseConversationList(body: unknown): ChatwootConversationSummary[] {
+  const payload = unwrapPayload(body);
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.flatMap((item) => {
+    const conversation = parseConversationSummary(item);
+    return conversation ? [conversation] : [];
+  });
+}
+
+function parseConversationSummary(body: unknown): ChatwootConversationSummary | null {
+  const record = unwrapIdRecord(body);
+  if (!isRecord(record) || typeof record.id !== 'number') {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    source_id: optionalString(record.source_id),
+    inbox_id: optionalNumber(record.inbox_id),
+    status: optionalString(record.status),
   };
 }
 
