@@ -55,6 +55,9 @@ describe('InstagramOutboundMessagesService', () => {
   it('ignores non-outgoing or non-Instagram Chatwoot messages', async () => {
     const service = new InstagramOutboundMessagesService(axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' }), chatwootMock(), oauthMock());
 
+    expect(service.isRelevantOutboundWebhook({ ...chatwootOutgoingPayload(), message_type: 'incoming' })).toBe(false);
+    expect(service.isRelevantOutboundWebhook(chatwootOutgoingPayload())).toBe(true);
+
     await expect(service.handleChatwootMessageCreated({ ...chatwootOutgoingPayload(), message_type: 'incoming' })).resolves.toEqual({
       status: 'ignored',
       reason: 'not_outbound_instagram_reply',

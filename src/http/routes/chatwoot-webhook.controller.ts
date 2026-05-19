@@ -20,6 +20,10 @@ export class ChatwootWebhookController {
     @Req() request: RawBodyRequest,
     @Body() body: ChatwootMessageCreatedPayload,
   ): Promise<OutboundMessageResult> {
+    if (!this.outboundMessages.isRelevantOutboundWebhook(body)) {
+      return { status: 'ignored', reason: 'not_outbound_instagram_reply' };
+    }
+
     if (!request.rawBody || !(await this.outboundMessages.isValidChatwootWebhookSignature(body, { signature, timestamp, rawBody: request.rawBody }))) {
       this.logger.warn('Rejected Chatwoot webhook POST: invalid or missing signature');
       throw new UnauthorizedException('Invalid Chatwoot webhook signature');

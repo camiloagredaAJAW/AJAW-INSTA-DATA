@@ -40,6 +40,10 @@ export class InstagramOutboundMessagesService {
     private readonly instagramOAuthClient: InstagramOAuthClient,
   ) {}
 
+  isRelevantOutboundWebhook(payload: ChatwootMessageCreatedPayload): boolean {
+    return parseChatwootOutboundPayload(payload) !== null;
+  }
+
   async isValidChatwootWebhookSignature(payload: ChatwootMessageCreatedPayload, input: ChatwootWebhookSignatureInput): Promise<boolean> {
     const linkage = parseChatwootWebhookLinkage(payload);
     if (!linkage || !input.timestamp || !input.signature?.startsWith('sha256=')) {
