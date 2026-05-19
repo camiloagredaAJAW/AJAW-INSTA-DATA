@@ -224,6 +224,25 @@ export class DefaultAxelorClient {
     return parseAxelorList<AxelorInstagramAccountRecord>(await response.json())[0] ?? null;
   }
 
+  async findInstagramAccountByChatwootLinkage(chatwootAccountId: string | number, chatwootInboxId: string | number, options: AxelorSearchOptions = {}): Promise<AxelorInstagramAccountRecord | null> {
+    const config = this.readConfig();
+    const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/search`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...this.buildAuthenticatedRestHeaders(config),
+      },
+      body: JSON.stringify(buildInstagramAccountSearchByChatwootLinkagePayload(chatwootAccountId, chatwootInboxId, options)),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Axelor InstagramAccount search failed with status ${response.status}`);
+    }
+
+    return parseAxelorList<AxelorInstagramAccountRecord>(await response.json())[0] ?? null;
+  }
+
   async findInstagramAccountByState(instagramState: string, options: AxelorSearchOptions = {}): Promise<AxelorInstagramAccountRecord | null> {
     const config = this.readConfig();
     const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/search`, {
@@ -413,6 +432,18 @@ export function buildInstagramAccountSearchByInstagramUserIdPayload(instagramUse
     data: {
       _domain: 'self.instagramUserId=:instagramUserId',
       _domainContext: { instagramUserId },
+    },
+  };
+}
+
+export function buildInstagramAccountSearchByChatwootLinkagePayload(chatwootAccountId: string | number, chatwootInboxId: string | number, options: AxelorSearchOptions = {}): Record<string, unknown> {
+  return {
+    fields: options.fields ?? DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS,
+    limit: options.limit ?? 1,
+    offset: options.offset ?? 0,
+    data: {
+      _domain: 'self.chatwootAccountId=:chatwootAccountId AND self.chatwootInboxId=:chatwootInboxId',
+      _domainContext: { chatwootAccountId, chatwootInboxId },
     },
   };
 }

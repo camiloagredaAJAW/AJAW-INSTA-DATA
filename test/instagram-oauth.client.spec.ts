@@ -113,6 +113,18 @@ describe('InstagramOAuthClient', () => {
     expect(url.searchParams.get('fields')).toBe('name,username,profile_pic');
     expect(url.searchParams.get('access_token')).toBe('instagram-token');
   });
+
+  it('sends Instagram text messages using the professional account id and scoped recipient id', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(response({ body: { recipient_id: 'recipient-1', message_id: 'mid-1' } }));
+    const client = new InstagramOAuthClient(configService(), fetcher);
+
+    await expect(client.sendTextMessage('ig-account-1', 'recipient-1', 'Hello', 'instagram-token')).resolves.toEqual({ recipientId: 'recipient-1', messageId: 'mid-1' });
+
+    expect(fetcher.mock.calls[0][0]).toBe('https://graph.instagram.com/v25.0/ig-account-1/messages');
+    expect(fetcher.mock.calls[0][1]?.method).toBe('POST');
+    expect(fetcher.mock.calls[0][1]?.headers).toEqual({ Authorization: 'Bearer instagram-token', 'Content-Type': 'application/json' });
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ recipient: { id: 'recipient-1' }, message: { text: 'Hello' } });
+  });
 });
 
 function configService(): ConfigService<EnvironmentConfig, true> {

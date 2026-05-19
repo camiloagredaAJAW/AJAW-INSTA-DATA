@@ -19,13 +19,16 @@ export interface ChatwootApiChannelSummary {
   name?: string;
   channel_type?: string;
   webhook_url?: string;
+  callback_webhook_url?: string;
   inbox_identifier?: string;
   hmac_token?: string;
+  secret?: string;
 }
 
 export interface CreateChatwootApiInboxPayload {
   name: string;
   channel?: {
+    webhook_url?: string;
     website_url?: string;
     welcome_title?: string;
     welcome_tagline?: string;
@@ -339,8 +342,10 @@ function parseInbox(body: unknown): ChatwootApiChannelSummary {
     name: optionalString(body.name),
     channel_type: optionalString(body.channel_type),
     webhook_url: optionalString(body.webhook_url),
+    callback_webhook_url: optionalString(body.callback_webhook_url),
     inbox_identifier: optionalString(body.inbox_identifier),
     hmac_token: optionalString(body.hmac_token),
+    secret: optionalString(body.secret),
   };
 }
 

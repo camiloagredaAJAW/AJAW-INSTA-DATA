@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EnvironmentConfig } from '../config/environment';
 import { IntegrationStatus } from '../domain/integrationStatus';
 import { AxelorClient, AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
 import { ChatwootClient, ChatwootApiChannelSummary, ChatwootProfile, DefaultChatwootClient, isChatwootApiChannelInbox } from '../infrastructure/chatwoot/chatwoot.client';
@@ -24,6 +26,7 @@ export class ActivateInstagramIntegrationService {
   constructor(
     private readonly axelorClient: DefaultAxelorClient,
     private readonly chatwootClient: DefaultChatwootClient,
+    private readonly configService: ConfigService<EnvironmentConfig, true>,
   ) {}
 
   async execute(request: ActivationRequest): Promise<ActivationResult> {
@@ -83,7 +86,7 @@ export class ActivateInstagramIntegrationService {
       const apiInboxes = (await this.chatwootClient.listInboxes(chatwootAccountId, chatwootApiKey)).filter(isChatwootApiChannelInbox);
       const inboxName = buildAvailableApiInboxName(resolveChatwootAccountName(chatwootProfile, chatwootAccountId), apiInboxes);
       const existingInbox = apiInboxes.find((inbox) => inbox.name === inboxName);
-      const inbox = existingInbox ?? (await this.chatwootClient.createApiInbox(chatwootAccountId, chatwootApiKey, { name: inboxName }));
+      const inbox = existingInbox ?? (await this.chatwootClient.createApiInbox(chatwootAccountId, chatwootApiKey, buildApiInboxPayload(inboxName, this.configService)));
 
       const updatedInstagramAccount = await this.axelorClient.updateInstagramAccount(
         instagramAccount.id,
@@ -249,12 +252,23 @@ function buildSuccessfulLinkageUpdate(accountId: number, inbox: ChatwootApiChann
     chatwootChannelType: inbox.channel_type,
     chatwootInboxName: inbox.name,
     chatwootInboxIdentifier: inbox.inbox_identifier,
-    chatwootWebhookUrl: inbox.webhook_url,
-    ...(inbox.hmac_token ? { chatwootHmacToken: inbox.hmac_token } : {}),
+    chatwootWebhookUrl: inbox.webhook_url ?? inbox.callback_webhook_url,
+    ...(inbox.secret || inbox.hmac_token ? { chatwootHmacToken: inbox.secret ?? inbox.hmac_token } : {}),
     chatwootIntegrationStatus: IntegrationStatus.Active,
     chatwootLastSyncAt: new Date().toISOString(),
     chatwootLastIntegrationError: null,
   };
+}
+
+function buildApiInboxPayload(name: string, configService: ConfigService<EnvironmentConfig, true>) {
+  const webhookUrl = buildChatwootWebhookUrl(configService.get('APP_BASE_URL', { infer: true }));
+
+  return webhookUrl ? { name, channel: { webhook_url: webhookUrl } } : { name };
+}
+
+function buildChatwootWebhookUrl(appBaseUrl: string | undefined): string | undefined {
+  const normalizedBaseUrl = appBaseUrl?.trim().replace(/\/+$/, '');
+  return normalizedBaseUrl ? `${normalizedBaseUrl}/integrations/chatwoot/webhook` : undefined;
 }
 
 function buildFailedLinkageUpdate(reason: string): Record<string, unknown> {

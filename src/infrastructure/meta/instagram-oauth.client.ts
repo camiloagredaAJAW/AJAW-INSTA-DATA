@@ -33,6 +33,11 @@ export interface InstagramMessagingUserProfileResponse {
   profilePic?: string;
 }
 
+export interface InstagramSendMessageResponse {
+  recipientId?: string;
+  messageId?: string;
+}
+
 export type InstagramLongLivedTokenResult =
   | { ok: true; token: InstagramLongLivedTokenResponse }
   | { ok: false; error: SafeInstagramOAuthError };
@@ -125,6 +130,23 @@ export class InstagramOAuthClient {
     return parseMessagingUserProfileResponse(await response.json());
   }
 
+  async sendTextMessage(instagramUserId: string, recipientId: string, text: string, accessToken: string): Promise<InstagramSendMessageResponse> {
+    const response = await this.fetcher(`https://graph.instagram.com/v25.0/${encodeURIComponent(instagramUserId)}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Instagram send message failed: ${await safeErrorMessage(response)}`);
+    }
+
+    return parseSendMessageResponse(await response.json());
+  }
+
   private getRequiredConfig(key: 'META_APP_ID' | 'META_APP_SECRET'): string {
     const value = this.configService.get(key, { infer: true });
     if (!value) {
@@ -194,6 +216,17 @@ function parseMessagingUserProfileResponse(body: unknown): InstagramMessagingUse
     username: typeof body.username === 'string' ? body.username : undefined,
     name: typeof body.name === 'string' ? body.name : undefined,
     profilePic: typeof body.profile_pic === 'string' ? body.profile_pic : undefined,
+  };
+}
+
+function parseSendMessageResponse(body: unknown): InstagramSendMessageResponse {
+  if (!isRecord(body)) {
+    return {};
+  }
+
+  return {
+    recipientId: typeof body.recipient_id === 'string' ? body.recipient_id : undefined,
+    messageId: typeof body.message_id === 'string' ? body.message_id : undefined,
   };
 }
 

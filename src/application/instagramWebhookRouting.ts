@@ -3,6 +3,7 @@ import { IntegrationStatus } from '../domain/integrationStatus';
 import { AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
 import { DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
 import { InstagramMessagingUserProfileResponse, InstagramOAuthClient } from '../infrastructure/meta/instagram-oauth.client';
+import { InstagramOutboundMessagesService } from './instagramOutboundMessages';
 import { redactText } from '../shared/redaction';
 import {
   InstagramWebhookDeliveredEvent,
@@ -23,6 +24,7 @@ export class InstagramWebhookRoutingService {
     private readonly axelorClient: DefaultAxelorClient,
     private readonly chatwootClient: DefaultChatwootClient,
     private readonly instagramOAuthClient: InstagramOAuthClient,
+    private readonly outboundMessages?: InstagramOutboundMessagesService,
   ) {}
 
   async route(request: InstagramWebhookRouteRequest): Promise<InstagramWebhookRouteResult> {
@@ -53,6 +55,11 @@ export class InstagramWebhookRoutingService {
       seenEvents.add(event.sourceEventId);
 
       try {
+        if (event.direction === 'outgoing' && this.outboundMessages?.wasSentByThisService(event.sourceEventId)) {
+          ignored.push({ sourceEventId: event.sourceEventId, reason: 'echo_of_chatwoot_outbound' });
+          continue;
+        }
+
         const account = await this.axelorClient.findInstagramAccountByInstagramUserId(event.instagramAccountId);
         const scopeFailure = instagramScopePreconditionFailure(account);
         if (scopeFailure) {

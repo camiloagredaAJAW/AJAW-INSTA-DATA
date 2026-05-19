@@ -38,8 +38,10 @@ describe('DefaultChatwootClient', () => {
             name: 'Instagram Account 11',
             channel_type: 'Channel::Api',
             webhook_url: 'https://chatwoot.test/webhooks/abc',
+            callback_webhook_url: 'https://chatwoot.test/callbacks/abc',
             inbox_identifier: 'inbox-abc',
             hmac_token: 'hmac-secret',
+            secret: 'webhook-secret',
           },
         ],
       }),
@@ -56,8 +58,10 @@ describe('DefaultChatwootClient', () => {
         name: 'Instagram Account 11',
         channel_type: 'Channel::Api',
         webhook_url: 'https://chatwoot.test/webhooks/abc',
+        callback_webhook_url: 'https://chatwoot.test/callbacks/abc',
         inbox_identifier: 'inbox-abc',
         hmac_token: 'hmac-secret',
+        secret: 'webhook-secret',
       },
     ]);
     expect(isChatwootApiChannelInbox({ id: 100, channel_type: 'Channel::Api' })).toBe(true);
@@ -83,8 +87,10 @@ describe('DefaultChatwootClient', () => {
       name: 'Instagram Account 11',
       channel_type: 'Channel::Api',
       webhook_url: undefined,
+      callback_webhook_url: undefined,
       inbox_identifier: undefined,
       hmac_token: undefined,
+      secret: undefined,
     });
     expect(buildCreateApiInboxBody({ name: 'Instagram Account 11' })).toEqual({
       name: 'Instagram Account 11',
@@ -94,6 +100,13 @@ describe('DefaultChatwootClient', () => {
       method: 'POST',
       headers: { Accept: 'application/json', api_access_token: 'token', 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Instagram Account 11', channel: { type: 'api' } }),
+    });
+  });
+
+  it('includes the API channel webhook URL when provided', () => {
+    expect(buildCreateApiInboxBody({ name: 'Instagram Account 11', channel: { webhook_url: 'https://app.test/integrations/chatwoot/webhook' } })).toEqual({
+      name: 'Instagram Account 11',
+      channel: { type: 'api', webhook_url: 'https://app.test/integrations/chatwoot/webhook' },
     });
   });
 

@@ -7,6 +7,7 @@ import {
   buildCreateInstagramAccountOAuthPlaceholderPayload,
   buildInstagramAccountConnectedUpdate,
   buildInstagramAccountOAuthStateUpdate,
+  buildInstagramAccountSearchByChatwootLinkagePayload,
   buildInstagramAccountSearchByStatePayload,
   buildInstagramAccountSearchByInstagramUserIdPayload,
   buildInstagramAccountSearchPayload,
@@ -236,6 +237,18 @@ describe('DefaultAxelorClient', () => {
     });
 
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(buildInstagramAccountSearchByInstagramUserIdPayload('178414000000'));
+  });
+
+  it('builds InstagramAccount search by Chatwoot linkage payload', () => {
+    expect(buildInstagramAccountSearchByChatwootLinkagePayload(50, 78)).toEqual({
+      offset: 0,
+      limit: 1,
+      fields: DEFAULT_INSTAGRAM_ACCOUNT_SEARCH_FIELDS,
+      data: {
+        _domain: 'self.chatwootAccountId=:chatwootAccountId AND self.chatwootInboxId=:chatwootInboxId',
+        _domainContext: { chatwootAccountId: 50, chatwootInboxId: 78 },
+      },
+    });
   });
 
   it('builds OAuth placeholder and state search payloads for Instagram login', async () => {

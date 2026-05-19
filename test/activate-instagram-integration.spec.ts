@@ -16,7 +16,7 @@ describe('ActivateInstagramIntegrationService', () => {
       instagramAccounts: [{ id: 11, version: 1, chatwootAccountId: 42, chatwootInboxId: 100, chatwootChannelId: 200 }],
     });
     const chatwoot = chatwootMock({ accountId: 42 });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toEqual({
       status: IntegrationStatus.Active,
@@ -44,7 +44,7 @@ describe('ActivateInstagramIntegrationService', () => {
       accountId: 42,
       createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' },
     });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
       status: IntegrationStatus.Active,
@@ -55,7 +55,7 @@ describe('ActivateInstagramIntegrationService', () => {
 
     expect(chatwoot.getProfile).toHaveBeenCalledWith('agent-secret');
     expect(chatwoot.listInboxes).toHaveBeenCalledWith(49, 'agent-secret');
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', { name: 'Chatwoot Account IG' });
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', apiInboxPayload('Chatwoot Account IG'));
   });
 
   it('falls back to Chatwoot profile when stored chatwootAccountId is missing or invalid', async () => {
@@ -64,7 +64,7 @@ describe('ActivateInstagramIntegrationService', () => {
       instagramAccounts: [publishedInstagramAccount({ id: 11, version: 3, chatwootAccountId: 0 })],
     });
     const chatwoot = chatwootMock({ accountId: 42 });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
       status: IntegrationStatus.Active,
@@ -83,7 +83,7 @@ describe('ActivateInstagramIntegrationService', () => {
     const chatwoot = chatwootMock({
       createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' },
     });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
       status: IntegrationStatus.Active,
@@ -93,7 +93,7 @@ describe('ActivateInstagramIntegrationService', () => {
     });
 
     expect(chatwoot.getProfile).toHaveBeenCalledWith('agent-secret');
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', { name: 'Chatwoot Account IG' });
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(49, 'agent-secret', apiInboxPayload('Chatwoot Account IG'));
     expect(axelor.updateInstagramAccount).toHaveBeenCalledTimes(1);
     expect(axelor.readInstagramAccount).toHaveBeenCalledWith(11);
   });
@@ -101,7 +101,7 @@ describe('ActivateInstagramIntegrationService', () => {
   it('returns failed when Agent does not have a Chatwoot API token', async () => {
     const axelor = axelorMock({ agent: { id: 7 }, instagramAccounts: [publishedInstagramAccount({ id: 11, version: 3 })] });
     const chatwoot = chatwootMock();
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toEqual({
       status: IntegrationStatus.Failed,
@@ -124,7 +124,7 @@ describe('ActivateInstagramIntegrationService', () => {
   it('returns failed when InstagramAccount is missing', async () => {
     const axelor = axelorMock({ agent: { id: 7, chatwootApiKey: 'agent-secret' }, instagramAccounts: [] });
     const chatwoot = chatwootMock();
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toEqual({
       status: IntegrationStatus.Failed,
@@ -141,7 +141,7 @@ describe('ActivateInstagramIntegrationService', () => {
       instagramAccounts: [{ id: 11, version: 1, agent: { id: 7 } }],
     });
     const chatwoot = chatwootMock({ accountId: 42 });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toEqual({
       status: IntegrationStatus.SchemaGap,
@@ -188,7 +188,7 @@ describe('ActivateInstagramIntegrationService', () => {
       ],
       createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG 2', channel_type: 'Channel::Api', webhook_url: 'https://hooks.test/101' },
     });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
       status: IntegrationStatus.Active,
@@ -200,7 +200,7 @@ describe('ActivateInstagramIntegrationService', () => {
     });
 
     expect(chatwoot.listInboxes).toHaveBeenCalledWith(42, 'agent-secret');
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', { name: 'Chatwoot Account IG 2' });
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', apiInboxPayload('Chatwoot Account IG 2'));
     expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(
       11,
       3,
@@ -227,7 +227,7 @@ describe('ActivateInstagramIntegrationService', () => {
       inboxes: [{ id: 99, channel_id: 199, name: 'Other inbox', channel_type: 'Channel::Api' }],
       createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', webhook_url: 'https://hooks.test/101' },
     });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
       status: IntegrationStatus.Active,
@@ -235,7 +235,7 @@ describe('ActivateInstagramIntegrationService', () => {
       chatwootChannelId: 201,
     });
 
-    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', { name: 'Chatwoot Account IG' });
+    expect(chatwoot.createApiInbox).toHaveBeenCalledWith(42, 'agent-secret', apiInboxPayload('Chatwoot Account IG'));
     expect(axelor.updateInstagramAccount).toHaveBeenCalledTimes(1);
     expect(axelor.readInstagramAccount).toHaveBeenCalledWith(11);
   });
@@ -255,9 +255,10 @@ describe('ActivateInstagramIntegrationService', () => {
         webhook_url: 'https://hooks.test/101',
         inbox_identifier: 'inbox-101',
         hmac_token: 'hmac-secret',
+        secret: 'webhook-secret',
       },
     });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({ status: IntegrationStatus.Active });
 
@@ -272,7 +273,7 @@ describe('ActivateInstagramIntegrationService', () => {
         chatwootInboxName: 'Chatwoot Account IG',
         chatwootInboxIdentifier: 'inbox-101',
         chatwootWebhookUrl: 'https://hooks.test/101',
-        chatwootHmacToken: 'hmac-secret',
+        chatwootHmacToken: 'webhook-secret',
         chatwootIntegrationStatus: IntegrationStatus.Active,
         chatwootLastIntegrationError: null,
       }),
@@ -290,7 +291,7 @@ describe('ActivateInstagramIntegrationService', () => {
       accountId: 42,
       createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', hmac_token: 'hmac-secret' },
     });
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     const result = await service.execute({ agentId: 7 });
 
@@ -319,7 +320,7 @@ describe('ActivateInstagramIntegrationService', () => {
     });
     const chatwoot = chatwootMock({ accountId: 42 });
     chatwoot.createApiInbox.mockRejectedValueOnce(new Error('Chatwoot failed for api_access_token=agent-secret hmac_token=hmac-secret'));
-    const service = new ActivateInstagramIntegrationService(axelor, chatwoot);
+    const service = createService(axelor, chatwoot);
 
     const result = await service.execute({ agentId: 7 });
 
@@ -468,6 +469,14 @@ function chatwootMock(options: ChatwootMockOptions = {}) {
   } as unknown as jest.Mocked<DefaultChatwootClient>;
 }
 
+function createService(axelor: jest.Mocked<DefaultAxelorClient>, chatwoot: jest.Mocked<DefaultChatwootClient>): ActivateInstagramIntegrationService {
+  return new ActivateInstagramIntegrationService(axelor, chatwoot, configService());
+}
+
+function apiInboxPayload(name: string) {
+  return { name, channel: { webhook_url: 'https://app.test/integrations/chatwoot/webhook' } };
+}
+
 function publishedInstagramAccount(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 11,
@@ -505,6 +514,10 @@ function configService(): ConfigService<EnvironmentConfig, true> {
     get: (key: keyof EnvironmentConfig) => {
       if (key === 'INTERNAL_API_KEY') {
         return 'test-internal-key';
+      }
+
+      if (key === 'APP_BASE_URL') {
+        return 'https://app.test';
       }
 
       throw new Error(`Unexpected config key: ${String(key)}`);
