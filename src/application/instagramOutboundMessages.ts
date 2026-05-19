@@ -15,6 +15,10 @@ export interface ChatwootMessageCreatedPayload {
   inbox?: { id?: string | number };
   account?: { id?: string | number };
   contact?: { identifier?: string | null };
+  conversation?: {
+    contact_inbox?: { source_id?: string | null };
+    meta?: { sender?: { identifier?: string | null } };
+  };
 }
 
 export interface OutboundMessageResult {
@@ -159,8 +163,7 @@ function parseChatwootOutboundPayload(payload: ChatwootMessageCreatedPayload): P
   const content = nonEmptyString(payload.content);
   const chatwootAccountId = positiveId(payload.account?.id);
   const chatwootInboxId = positiveId(payload.inbox?.id);
-  const identifier = nonEmptyString(payload.contact?.identifier);
-  const recipientId = identifier?.startsWith('instagram:user:') ? identifier.slice('instagram:user:'.length) : undefined;
+  const recipientId = resolveInstagramRecipientId(payload);
 
   if (!content || !chatwootAccountId || !chatwootInboxId || !recipientId) {
     return null;
@@ -173,6 +176,17 @@ function parseChatwootOutboundPayload(payload: ChatwootMessageCreatedPayload): P
     recipientId,
     content,
   };
+}
+
+function resolveInstagramRecipientId(payload: ChatwootMessageCreatedPayload): string | undefined {
+  const identifier = nonEmptyString(payload.contact?.identifier) ?? nonEmptyString(payload.conversation?.meta?.sender?.identifier);
+  if (identifier?.startsWith('instagram:user:')) {
+    return identifier.slice('instagram:user:'.length);
+  }
+
+  const sourceId = nonEmptyString(payload.conversation?.contact_inbox?.source_id);
+  const match = sourceId?.match(/^ig:[^:]+:user:(.+)$/);
+  return match?.[1];
 }
 
 function missingOutboundPrecondition(account: AxelorInstagramAccountRecord | null): string | null {

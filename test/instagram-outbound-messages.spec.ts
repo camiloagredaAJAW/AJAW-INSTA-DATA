@@ -17,6 +17,34 @@ describe('InstagramOutboundMessagesService', () => {
     expect(service.wasSentByThisService('ig-mid-1')).toBe(true);
   });
 
+  it('resolves outgoing reply recipients from Chatwoot conversation metadata', async () => {
+    const axelorClient = axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' });
+    const instagramOAuthClient = oauthMock({ messageId: 'ig-mid-1' });
+    const service = new InstagramOutboundMessagesService(axelorClient, chatwootMock(), instagramOAuthClient);
+    const payload = {
+      ...chatwootOutgoingPayload(),
+      contact: undefined,
+      conversation: { meta: { sender: { identifier: 'instagram:user:1634976877768677' } } },
+    };
+
+    expect(service.isRelevantOutboundWebhook(payload)).toBe(true);
+
+    await expect(service.handleChatwootMessageCreated(payload)).resolves.toEqual({ status: 'sent', messageId: 'ig-mid-1' });
+
+    expect(instagramOAuthClient.sendTextMessage).toHaveBeenCalledWith('17841410077817456', '1634976877768677', 'Hola desde Chatwoot', 'instagram-token');
+  });
+
+  it('resolves outgoing reply recipients from Chatwoot contact inbox source id', async () => {
+    const service = new InstagramOutboundMessagesService(axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token' }), chatwootMock(), oauthMock());
+    const payload = {
+      ...chatwootOutgoingPayload(),
+      contact: undefined,
+      conversation: { contact_inbox: { source_id: 'ig:17841410077817456:user:1634976877768677' } },
+    };
+
+    expect(service.isRelevantOutboundWebhook(payload)).toBe(true);
+  });
+
   it('validates Chatwoot API inbox webhook signatures with the stored channel secret', async () => {
     const axelorClient = axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' });
     const service = new InstagramOutboundMessagesService(axelorClient, chatwootMock(), oauthMock());
