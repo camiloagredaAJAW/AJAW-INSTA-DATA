@@ -130,6 +130,23 @@ describe('InstagramWebhookRoutingService', () => {
     );
   });
 
+  it('ignores Instagram echo messages that match a recent Chatwoot outbound send by recipient and text', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    const outboundMessages = { wasSentByThisService: jest.fn().mockReturnValue(false), wasRecentlySentByThisService: jest.fn().mockReturnValue(true) };
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock(), outboundMessages as never);
+
+    await expect(service.route({ payload: outgoingDmPayload() })).resolves.toEqual({
+      status: 'ignored',
+      processed: [],
+      ignored: [{ sourceEventId: 'mid-out-1', reason: 'echo_of_chatwoot_outbound' }],
+      failures: [],
+    });
+
+    expect(outboundMessages.wasRecentlySentByThisService).toHaveBeenCalledWith('sender-1', 'hola muy bien');
+    expect(chatwootClient.createIncomingMessage).not.toHaveBeenCalled();
+  });
+
   it('updates an existing generic Chatwoot contact with Instagram sender profile details', async () => {
     const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();

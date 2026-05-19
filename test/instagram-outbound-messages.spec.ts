@@ -15,6 +15,7 @@ describe('InstagramOutboundMessagesService', () => {
     expect(axelorClient.findInstagramAccountByChatwootLinkage).toHaveBeenCalledWith(50, 78);
     expect(instagramOAuthClient.sendTextMessage).toHaveBeenCalledWith('17841410077817456', '1634976877768677', 'Hola desde Chatwoot', 'instagram-token');
     expect(service.wasSentByThisService('ig-mid-1')).toBe(true);
+    expect(service.wasRecentlySentByThisService('1634976877768677', 'Hola desde Chatwoot')).toBe(true);
   });
 
   it('resolves outgoing reply recipients from Chatwoot conversation metadata', async () => {

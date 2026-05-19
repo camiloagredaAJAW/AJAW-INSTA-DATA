@@ -37,6 +37,7 @@ export interface ChatwootWebhookSignatureInput {
 export class InstagramOutboundMessagesService {
   private readonly logger = new Logger(InstagramOutboundMessagesService.name);
   private readonly sentInstagramMessageIds = new Set<string>();
+  private readonly recentOutboundFingerprints = new Map<string, number>();
 
   constructor(
     private readonly axelorClient: DefaultAxelorClient,
@@ -102,6 +103,7 @@ export class InstagramOutboundMessagesService {
       if (result.messageId) {
         this.sentInstagramMessageIds.add(result.messageId);
       }
+      this.recentOutboundFingerprints.set(buildOutboundFingerprint(parsed.recipientId, parsed.content), Date.now());
       this.logger.log(`Chatwoot outbound message sent to Instagram: chatwootMessageId=${parsed.chatwootMessageId ?? 'unknown'} recipientId=${parsed.recipientId}`);
       return { status: 'sent', messageId: result.messageId };
     } catch (error) {
@@ -113,6 +115,21 @@ export class InstagramOutboundMessagesService {
 
   wasSentByThisService(instagramMessageId: string): boolean {
     return this.sentInstagramMessageIds.has(instagramMessageId);
+  }
+
+  wasRecentlySentByThisService(recipientId: string, content: string): boolean {
+    const fingerprint = buildOutboundFingerprint(recipientId, content);
+    const sentAt = this.recentOutboundFingerprints.get(fingerprint);
+    if (!sentAt) {
+      return false;
+    }
+
+    if (Date.now() - sentAt > 5 * 60 * 1000) {
+      this.recentOutboundFingerprints.delete(fingerprint);
+      return false;
+    }
+
+    return true;
   }
 
   private async refreshChatwootChannelSecret(account: AxelorInstagramAccountRecord | null, chatwootInboxId: string | number): Promise<string | undefined> {
@@ -138,6 +155,10 @@ export class InstagramOutboundMessagesService {
       return undefined;
     }
   }
+}
+
+function buildOutboundFingerprint(recipientId: string, content: string): string {
+  return `${recipientId}\n${content.trim()}`;
 }
 
 function isValidChatwootSignature(secret: string, timestamp: string, providedHex: string, rawBody: Buffer): boolean {

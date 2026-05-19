@@ -55,7 +55,11 @@ export class InstagramWebhookRoutingService {
       seenEvents.add(event.sourceEventId);
 
       try {
-        if (event.direction === 'outgoing' && this.outboundMessages?.wasSentByThisService(event.sourceEventId)) {
+        if (
+          event.direction === 'outgoing' &&
+          (this.outboundMessages?.wasSentByThisService(event.sourceEventId) ||
+            (event.text && this.outboundMessages?.wasRecentlySentByThisService(event.senderId, event.text)))
+        ) {
           ignored.push({ sourceEventId: event.sourceEventId, reason: 'echo_of_chatwoot_outbound' });
           continue;
         }
