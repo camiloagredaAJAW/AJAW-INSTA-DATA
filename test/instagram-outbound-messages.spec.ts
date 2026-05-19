@@ -1,13 +1,14 @@
 import { InstagramOutboundMessagesService } from '../src/application/instagramOutboundMessages';
 import { createHmac } from 'node:crypto';
 import { DefaultAxelorClient } from '../src/infrastructure/axelor/axelor.client';
+import { DefaultChatwootClient } from '../src/infrastructure/chatwoot/chatwoot.client';
 import { InstagramOAuthClient } from '../src/infrastructure/meta/instagram-oauth.client';
 
 describe('InstagramOutboundMessagesService', () => {
   it('sends Chatwoot outgoing API inbox replies to the Instagram contact', async () => {
     const axelorClient = axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' });
     const instagramOAuthClient = oauthMock({ messageId: 'ig-mid-1' });
-    const service = new InstagramOutboundMessagesService(axelorClient, instagramOAuthClient);
+    const service = new InstagramOutboundMessagesService(axelorClient, chatwootMock(), instagramOAuthClient);
 
     await expect(service.handleChatwootMessageCreated(chatwootOutgoingPayload())).resolves.toEqual({ status: 'sent', messageId: 'ig-mid-1' });
 
@@ -18,7 +19,7 @@ describe('InstagramOutboundMessagesService', () => {
 
   it('validates Chatwoot API inbox webhook signatures with the stored channel secret', async () => {
     const axelorClient = axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' });
-    const service = new InstagramOutboundMessagesService(axelorClient, oauthMock());
+    const service = new InstagramOutboundMessagesService(axelorClient, chatwootMock(), oauthMock());
     const rawBody = Buffer.from(JSON.stringify(chatwootOutgoingPayload()));
     const timestamp = '1710000000';
     const signature = `sha256=${createHmac('sha256', 'webhook-secret').update(`${timestamp}.`).update(rawBody).digest('hex')}`;
@@ -29,7 +30,7 @@ describe('InstagramOutboundMessagesService', () => {
   });
 
   it('rejects Chatwoot webhook signatures that do not match the stored channel secret', async () => {
-    const service = new InstagramOutboundMessagesService(axelorMock({ chatwootHmacToken: 'webhook-secret' }), oauthMock());
+    const service = new InstagramOutboundMessagesService(axelorMock({ chatwootHmacToken: 'webhook-secret' }), chatwootMock(), oauthMock());
     const rawBody = Buffer.from(JSON.stringify(chatwootOutgoingPayload()));
     const timestamp = '1710000000';
     const signature = `sha256=${createHmac('sha256', 'wrong-secret').update(`${timestamp}.`).update(rawBody).digest('hex')}`;
@@ -37,8 +38,22 @@ describe('InstagramOutboundMessagesService', () => {
     await expect(service.isValidChatwootWebhookSignature(chatwootOutgoingPayload(), { signature, timestamp, rawBody })).resolves.toBe(false);
   });
 
+  it('refreshes the Chatwoot channel secret when the stored token is stale', async () => {
+    const axelorClient = axelorMock({ id: 11, version: 3, chatwootAccountId: 50, chatwootHmacToken: 'stale-hmac-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock({ id: 78, secret: 'webhook-secret' });
+    const service = new InstagramOutboundMessagesService(axelorClient, chatwootClient, oauthMock());
+    const rawBody = Buffer.from(JSON.stringify(chatwootOutgoingPayload()));
+    const timestamp = '1710000000';
+    const signature = `sha256=${createHmac('sha256', 'webhook-secret').update(`${timestamp}.`).update(rawBody).digest('hex')}`;
+
+    await expect(service.isValidChatwootWebhookSignature(chatwootOutgoingPayload(), { signature, timestamp, rawBody })).resolves.toBe(true);
+
+    expect(chatwootClient.listInboxes).toHaveBeenCalledWith(50, 'agent-secret');
+    expect(axelorClient.updateInstagramAccount).toHaveBeenCalledWith(11, 3, { chatwootHmacToken: 'webhook-secret' });
+  });
+
   it('ignores non-outgoing or non-Instagram Chatwoot messages', async () => {
-    const service = new InstagramOutboundMessagesService(axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' }), oauthMock());
+    const service = new InstagramOutboundMessagesService(axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' }), chatwootMock(), oauthMock());
 
     await expect(service.handleChatwootMessageCreated({ ...chatwootOutgoingPayload(), message_type: 'incoming' })).resolves.toEqual({
       status: 'ignored',
@@ -64,11 +79,18 @@ function chatwootOutgoingPayload() {
   };
 }
 
-function axelorMock(account: { instagramUserId?: string; accessToken?: string; chatwootHmacToken?: string } | null) {
+function axelorMock(account: { id?: string | number; version?: number; instagramUserId?: string; accessToken?: string; chatwootAccountId?: string | number; chatwootHmacToken?: string; agent?: { id: string | number; chatwootApiKey?: string } } | null) {
   return {
     login: jest.fn().mockResolvedValue({ jsessionId: 'session-id' }),
     findInstagramAccountByChatwootLinkage: jest.fn().mockResolvedValue(account),
+    updateInstagramAccount: jest.fn().mockResolvedValue(account),
   } as unknown as jest.Mocked<DefaultAxelorClient>;
+}
+
+function chatwootMock(inbox: { id?: number; secret?: string } = {}) {
+  return {
+    listInboxes: jest.fn().mockResolvedValue([{ id: inbox.id ?? 78, secret: inbox.secret }]),
+  } as unknown as jest.Mocked<DefaultChatwootClient>;
 }
 
 function oauthMock(result: { messageId?: string } = {}) {

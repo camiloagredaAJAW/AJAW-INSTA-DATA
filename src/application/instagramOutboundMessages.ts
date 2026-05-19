@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
+import { DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
 import { InstagramOAuthClient } from '../infrastructure/meta/instagram-oauth.client';
 import { redactText } from '../shared/redaction';
 
@@ -35,6 +36,7 @@ export class InstagramOutboundMessagesService {
 
   constructor(
     private readonly axelorClient: DefaultAxelorClient,
+    private readonly chatwootClient: DefaultChatwootClient,
     private readonly instagramOAuthClient: InstagramOAuthClient,
   ) {}
 
@@ -52,16 +54,23 @@ export class InstagramOutboundMessagesService {
     await this.axelorClient.login();
     const account = await this.axelorClient.findInstagramAccountByChatwootLinkage(linkage.chatwootAccountId, linkage.chatwootInboxId);
     const secret = typeof account?.chatwootHmacToken === 'string' && account.chatwootHmacToken.trim() ? account.chatwootHmacToken.trim() : undefined;
-    if (!secret) {
-      this.logger.warn('Rejected Chatwoot webhook POST: missing stored Chatwoot channel secret');
+
+    if (secret && isValidChatwootSignature(secret, input.timestamp, providedHex, input.rawBody)) {
+      return true;
+    }
+
+    const refreshedSecret = await this.refreshChatwootChannelSecret(account, linkage.chatwootInboxId);
+    if (refreshedSecret && isValidChatwootSignature(refreshedSecret, input.timestamp, providedHex, input.rawBody)) {
+      return true;
+    }
+
+    if (!secret && !refreshedSecret) {
+      this.logger.warn('Rejected Chatwoot webhook POST: missing Chatwoot channel secret');
       return false;
     }
 
-    const expectedHex = createHmac('sha256', secret).update(`${input.timestamp}.`).update(input.rawBody).digest('hex');
-    const provided = Buffer.from(providedHex, 'hex');
-    const expected = Buffer.from(expectedHex, 'hex');
-
-    return provided.length === expected.length && timingSafeEqual(provided, expected);
+    this.logger.warn('Rejected Chatwoot webhook POST: signature mismatch');
+    return false;
   }
 
   async handleChatwootMessageCreated(payload: ChatwootMessageCreatedPayload): Promise<OutboundMessageResult> {
@@ -97,6 +106,38 @@ export class InstagramOutboundMessagesService {
   wasSentByThisService(instagramMessageId: string): boolean {
     return this.sentInstagramMessageIds.has(instagramMessageId);
   }
+
+  private async refreshChatwootChannelSecret(account: AxelorInstagramAccountRecord | null, chatwootInboxId: string | number): Promise<string | undefined> {
+    const chatwootAccountId = positiveId(account?.chatwootAccountId);
+    const apiAccessToken = nonEmptyString(account?.agent?.chatwootApiKey);
+    if (!account || !chatwootAccountId || !apiAccessToken || typeof account.version !== 'number') {
+      return undefined;
+    }
+
+    try {
+      const inboxes = await this.chatwootClient.listInboxes(Number(chatwootAccountId), apiAccessToken);
+      const inbox = inboxes.find((candidate) => String(candidate.id) === String(chatwootInboxId));
+      const refreshedSecret = nonEmptyString(inbox?.secret);
+      if (!refreshedSecret) {
+        return undefined;
+      }
+
+      await this.axelorClient.updateInstagramAccount(account.id, account.version, { chatwootHmacToken: refreshedSecret });
+      this.logger.log(`Refreshed Chatwoot channel secret for inboxId=${chatwootInboxId}`);
+      return refreshedSecret;
+    } catch (error) {
+      this.logger.warn(`Unable to refresh Chatwoot channel secret: reason=${redactText(error instanceof Error ? error.message : String(error))}`);
+      return undefined;
+    }
+  }
+}
+
+function isValidChatwootSignature(secret: string, timestamp: string, providedHex: string, rawBody: Buffer): boolean {
+  const expectedHex = createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest('hex');
+  const provided = Buffer.from(providedHex, 'hex');
+  const expected = Buffer.from(expectedHex, 'hex');
+
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
 function parseChatwootWebhookLinkage(payload: ChatwootMessageCreatedPayload): { chatwootAccountId: string | number; chatwootInboxId: string | number } | null {
