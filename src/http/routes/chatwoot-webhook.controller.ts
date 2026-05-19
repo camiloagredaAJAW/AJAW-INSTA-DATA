@@ -24,9 +24,20 @@ export class ChatwootWebhookController {
       return { status: 'ignored', reason: 'not_outbound_instagram_reply' };
     }
 
-    if (!request.rawBody || !(await this.outboundMessages.isValidChatwootWebhookSignature(body, { signature, timestamp, rawBody: request.rawBody }))) {
-      this.logger.warn('Rejected Chatwoot webhook POST: invalid or missing signature');
+    if (!request.rawBody) {
+      this.logger.warn('Rejected Chatwoot webhook POST: missing raw body');
       throw new UnauthorizedException('Invalid Chatwoot webhook signature');
+    }
+
+    const hasSignatureHeaders = Boolean(signature || timestamp);
+    const hasValidSignature = await this.outboundMessages.isValidChatwootWebhookSignature(body, { signature, timestamp, rawBody: request.rawBody });
+    if (hasSignatureHeaders && !hasValidSignature) {
+      this.logger.warn('Rejected Chatwoot webhook POST: invalid signature');
+      throw new UnauthorizedException('Invalid Chatwoot webhook signature');
+    }
+
+    if (!hasSignatureHeaders) {
+      this.logger.warn('Accepted unsigned Chatwoot outbound webhook because this Chatwoot instance did not send signature headers');
     }
 
     return this.outboundMessages.handleChatwootMessageCreated(body);
