@@ -36,6 +36,7 @@ export interface CreateChatwootApiInboxPayload {
 export interface ChatwootContactSummary {
   id: number;
   identifier?: string;
+  name?: string;
   contact_inboxes?: ChatwootContactInboxLink[];
 }
 
@@ -63,6 +64,13 @@ export interface CreateChatwootContactPayload {
   inbox_id: number;
   identifier: string;
   name: string;
+  avatar_url?: string;
+  additional_attributes?: Record<string, unknown>;
+}
+
+export interface UpdateChatwootContactPayload {
+  name?: string;
+  avatar_url?: string;
   additional_attributes?: Record<string, unknown>;
 }
 
@@ -154,6 +162,21 @@ export class DefaultChatwootClient {
   async createContact(accountId: number, apiAccessToken: string, payload: CreateChatwootContactPayload): Promise<ChatwootContactSummary> {
     const response = await this.postJson(accountId, apiAccessToken, '/contacts', payload);
     return parseIdSummary(await response.json(), 'Chatwoot contact response is missing id');
+  }
+
+  async updateContact(accountId: number, apiAccessToken: string, contactId: number, payload: UpdateChatwootContactPayload): Promise<void> {
+    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, `/api/v1/accounts/${accountId}/contacts/${contactId}`), {
+      method: 'PUT',
+      headers: {
+        ...buildChatwootAuthHeaders(apiAccessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chatwoot contact update request failed: method=PUT path=/api/v1/accounts/${accountId}/contacts/${contactId} status=${response.status}`);
+    }
   }
 
   async searchContacts(accountId: number, apiAccessToken: string, query: string): Promise<ChatwootContactSummary[]> {
@@ -311,10 +334,12 @@ function parseIdSummary<T extends { id: number; source_id?: string; identifier?:
   }
 
   const contactInboxes = parseContactInboxLinks(record.contact_inboxes);
+  const name = optionalString(record.name);
   return {
     id: record.id,
     source_id: optionalString(record.source_id),
     identifier: optionalString(record.identifier),
+    ...(name ? { name } : {}),
     ...(contactInboxes ? { contact_inboxes: contactInboxes } : {}),
   } as T;
 }
@@ -330,10 +355,12 @@ function parseContactList(body: unknown): ChatwootContactSummary[] {
       return [];
     }
 
+    const name = optionalString(item.name);
     return [
       {
         id: item.id,
         identifier: optionalString(item.identifier),
+        ...(name ? { name } : {}),
         contact_inboxes: parseContactInboxLinks(item.contact_inboxes),
       },
     ];

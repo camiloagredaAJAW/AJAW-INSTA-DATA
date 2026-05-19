@@ -95,6 +95,24 @@ describe('InstagramOAuthClient', () => {
 
     await expect(client.fetchProfile('token')).resolves.toEqual({ userId: '17841410077817456', username: 'ajaw_ai', name: undefined });
   });
+
+  it('fetches Instagram messaging sender profile details from the scoped sender id', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { name: 'Peter Chang', username: 'peter_chang_live', profile_pic: 'https://profile.test/peter.jpg' } }),
+    );
+    const client = new InstagramOAuthClient(configService(), fetcher);
+
+    await expect(client.fetchMessagingUserProfile('1634976877768677', 'instagram-token')).resolves.toEqual({
+      name: 'Peter Chang',
+      username: 'peter_chang_live',
+      profilePic: 'https://profile.test/peter.jpg',
+    });
+
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.origin + url.pathname).toBe('https://graph.instagram.com/v25.0/1634976877768677');
+    expect(url.searchParams.get('fields')).toBe('name,username,profile_pic');
+    expect(url.searchParams.get('access_token')).toBe('instagram-token');
+  });
 });
 
 function configService(): ConfigService<EnvironmentConfig, true> {

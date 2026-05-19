@@ -106,7 +106,7 @@ describe('App foundation', () => {
             {
               kind: 'dm',
               sourceEventId: 'm_abc123',
-              conversationSourceId: 'ig:dm:17841400000000000:123456789',
+              conversationSourceId: 'ig:17841400000000000:user:123456789',
               messageSourceId: 'ig:event:m_abc123',
             },
           ],

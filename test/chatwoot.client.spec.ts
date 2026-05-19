@@ -179,6 +179,17 @@ describe('DefaultChatwootClient', () => {
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ inbox_id: 100, source_id: 'ig:account-1:user:sender-1' });
   });
 
+  it('updates contacts with profile details without leaking the API token', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(response({ status: 204 }));
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.updateContact(1, 'token', 10, { name: 'Peter Chang', avatar_url: 'https://profile.test/peter.jpg' })).resolves.toBeUndefined();
+
+    expect(fetcher.mock.calls[0][0]).toBe('https://chatwoot.test/api/v1/accounts/1/contacts/10');
+    expect(fetcher.mock.calls[0][1]?.method).toBe('PUT');
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ name: 'Peter Chang', avatar_url: 'https://profile.test/peter.jpg' });
+  });
+
   it('reports non-secret Chatwoot endpoint diagnostics for failed API requests', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(response({ ok: false, status: 404, body: {} }));
     const client = new DefaultChatwootClient(configService(), fetcher);

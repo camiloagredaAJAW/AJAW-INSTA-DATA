@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { IntegrationStatus } from '../domain/integrationStatus';
 import { AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
 import { DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
+import { InstagramMessagingUserProfileResponse, InstagramOAuthClient } from '../infrastructure/meta/instagram-oauth.client';
 import { redactText } from '../shared/redaction';
 import {
   InstagramWebhookDeliveredEvent,
@@ -21,6 +22,7 @@ export class InstagramWebhookRoutingService {
   constructor(
     private readonly axelorClient: DefaultAxelorClient,
     private readonly chatwootClient: DefaultChatwootClient,
+    private readonly instagramOAuthClient: InstagramOAuthClient,
   ) {}
 
   async route(request: InstagramWebhookRouteRequest): Promise<InstagramWebhookRouteResult> {
@@ -99,10 +101,10 @@ export class InstagramWebhookRoutingService {
     const chatwootInboxId = toPositiveInteger(account.chatwootInboxId, 'chatwootInboxId');
     const contactSourceId = buildContactSourceId(event.senderId);
     const contactInboxSourceId = buildContactInboxSourceId(event.instagramAccountId, event.senderId);
-    const conversationSourceId = buildConversationSourceId(event);
     const messageSourceId = buildMessageSourceId(event.sourceEventId);
+    const senderProfile = event.kind === 'dm' ? await this.fetchSenderProfile(event, account) : {};
 
-    const contact = await this.findOrCreateContact(chatwootAccountId, apiKey, chatwootInboxId, contactSourceId, event);
+    const contact = await this.findOrCreateContact(chatwootAccountId, apiKey, chatwootInboxId, contactSourceId, event, senderProfile);
     const existingContactInboxSourceId = contact.contact_inboxes?.find((link) => link.inbox?.id === chatwootInboxId)?.source_id;
     const contactInbox = existingContactInboxSourceId
       ? { id: undefined, source_id: existingContactInboxSourceId }
@@ -111,6 +113,7 @@ export class InstagramWebhookRoutingService {
           inbox_id: chatwootInboxId,
           source_id: contactInboxSourceId,
         });
+    const conversationSourceId = buildConversationSourceId(event, contactInbox.source_id ?? contactInboxSourceId);
     const conversation = await this.chatwootClient.createConversation(chatwootAccountId, apiKey, {
       inbox_id: chatwootInboxId,
       contact_id: contact.id,
@@ -127,27 +130,47 @@ export class InstagramWebhookRoutingService {
     return { kind: event.kind, sourceEventId: event.sourceEventId, conversationSourceId, messageSourceId };
   }
 
+  private async fetchSenderProfile(event: NormalizedInstagramWebhookEvent, account: RoutableInstagramAccount): Promise<InstagramMessagingUserProfileResponse> {
+    if (!account.accessToken) {
+      return {};
+    }
+
+    try {
+      return await this.instagramOAuthClient.fetchMessagingUserProfile(event.senderId, account.accessToken);
+    } catch (error) {
+      this.logger.warn(`Instagram sender profile lookup skipped: senderId=${event.senderId} reason=${redactText(error instanceof Error ? error.message : String(error))}`);
+      return {};
+    }
+  }
+
   private async findOrCreateContact(
     chatwootAccountId: number,
     apiKey: string,
     chatwootInboxId: number,
     contactSourceId: string,
     event: NormalizedInstagramWebhookEvent,
+    senderProfile: InstagramMessagingUserProfileResponse,
   ) {
     const contacts = await this.chatwootClient.searchContacts(chatwootAccountId, apiKey, contactSourceId);
     const existingContact = contacts.find((contact) => contact.identifier === contactSourceId);
     if (existingContact) {
+      const profileName = bestInstagramContactName(event, senderProfile);
+      if (profileName && existingContact.name !== profileName) {
+        await this.chatwootClient.updateContact(chatwootAccountId, apiKey, existingContact.id, {
+          name: profileName,
+          avatar_url: senderProfile.profilePic,
+          additional_attributes: buildContactAttributes(event, senderProfile),
+        });
+      }
       return existingContact;
     }
 
     return this.chatwootClient.createContact(chatwootAccountId, apiKey, {
       inbox_id: chatwootInboxId,
       identifier: contactSourceId,
-      name: event.senderName ?? `Instagram user ${event.senderId}`,
-      additional_attributes: {
-        instagram_sender_id: event.senderId,
-        instagram_account_id: event.instagramAccountId,
-      },
+      name: bestInstagramContactName(event, senderProfile) ?? `Instagram user ${event.senderId}`,
+      avatar_url: senderProfile.profilePic,
+      additional_attributes: buildContactAttributes(event, senderProfile),
     });
   }
 
@@ -193,8 +216,8 @@ export function buildContactInboxSourceId(instagramAccountId: string, senderId: 
   return `ig:${instagramAccountId}:user:${senderId}`;
 }
 
-export function buildConversationSourceId(event: NormalizedInstagramWebhookEvent): string {
-  return event.kind === 'comment' ? `ig:comment:${event.sourceEventId}` : `ig:dm:${event.instagramAccountId}:${event.senderId}`;
+export function buildConversationSourceId(event: NormalizedInstagramWebhookEvent, contactInboxSourceId: string): string {
+  return event.kind === 'comment' ? `ig:comment:${event.sourceEventId}` : contactInboxSourceId;
 }
 
 export function buildMessageSourceId(sourceEventId: string): string {
@@ -358,6 +381,19 @@ function buildConversationAttributes(event: NormalizedInstagramWebhookEvent): Re
     ...(event.publication?.id ? { instagram_publication_id: event.publication.id } : {}),
     ...(event.publication?.url ? { instagram_publication_url: event.publication.url } : {}),
     ...(event.publication?.caption ? { instagram_publication_caption: event.publication.caption } : {}),
+  };
+}
+
+function bestInstagramContactName(event: NormalizedInstagramWebhookEvent, senderProfile: InstagramMessagingUserProfileResponse): string | undefined {
+  return senderProfile.name ?? senderProfile.username ?? event.senderName;
+}
+
+function buildContactAttributes(event: NormalizedInstagramWebhookEvent, senderProfile: InstagramMessagingUserProfileResponse): Record<string, unknown> {
+  return {
+    instagram_sender_id: event.senderId,
+    instagram_account_id: event.instagramAccountId,
+    ...(senderProfile.username ? { instagram_username: senderProfile.username } : {}),
+    ...(senderProfile.name ? { instagram_name: senderProfile.name } : {}),
   };
 }
 

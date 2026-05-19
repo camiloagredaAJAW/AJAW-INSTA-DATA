@@ -27,6 +27,12 @@ export interface InstagramProfileResponse {
   name?: string;
 }
 
+export interface InstagramMessagingUserProfileResponse {
+  username?: string;
+  name?: string;
+  profilePic?: string;
+}
+
 export type InstagramLongLivedTokenResult =
   | { ok: true; token: InstagramLongLivedTokenResponse }
   | { ok: false; error: SafeInstagramOAuthError };
@@ -106,6 +112,19 @@ export class InstagramOAuthClient {
     return parseProfileResponse(await response.json());
   }
 
+  async fetchMessagingUserProfile(scopedUserId: string, accessToken: string): Promise<InstagramMessagingUserProfileResponse> {
+    const url = new URL(`https://graph.instagram.com/v25.0/${encodeURIComponent(scopedUserId)}`);
+    url.searchParams.set('fields', 'name,username,profile_pic');
+    url.searchParams.set('access_token', accessToken);
+
+    const response = await this.fetcher(url.toString(), { method: 'GET' });
+    if (!response.ok) {
+      throw new Error(`Instagram messaging user profile lookup failed: ${await safeErrorMessage(response)}`);
+    }
+
+    return parseMessagingUserProfileResponse(await response.json());
+  }
+
   private getRequiredConfig(key: 'META_APP_ID' | 'META_APP_SECRET'): string {
     const value = this.configService.get(key, { infer: true });
     if (!value) {
@@ -163,6 +182,18 @@ function parseProfileResponse(body: unknown): InstagramProfileResponse {
     userId,
     username: typeof record.username === 'string' ? record.username : undefined,
     name: typeof record.name === 'string' ? record.name : undefined,
+  };
+}
+
+function parseMessagingUserProfileResponse(body: unknown): InstagramMessagingUserProfileResponse {
+  if (!isRecord(body)) {
+    return {};
+  }
+
+  return {
+    username: typeof body.username === 'string' ? body.username : undefined,
+    name: typeof body.name === 'string' ? body.name : undefined,
+    profilePic: typeof body.profile_pic === 'string' ? body.profile_pic : undefined,
   };
 }
 
