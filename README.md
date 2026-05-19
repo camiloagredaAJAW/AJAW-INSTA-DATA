@@ -89,9 +89,11 @@ Configure the webhook from <https://developers.facebook.com/> for the same app t
 4. Keep `META_APP_SECRET` configured in the runtime environment before enabling POST delivery. Incoming webhook POST requests are rejected unless `X-Hub-Signature-256` validates against the raw request body.
 5. Subscribe the Instagram object/events needed for messages and comments, and ensure the connected account has the required scopes: `instagram_business_basic`, `instagram_business_manage_messages`, and `instagram_manage_comments`.
 
-The webhook router resolves the target `InstagramAccount` by `instagramUserId`, then uses its existing Chatwoot API Channel linkage (`chatwootAccountId`, `chatwootInboxId`, and `Agent.chatwootApiKey`) to create Chatwoot contacts, contact inboxes, conversations, and incoming messages. Instagram DMs are routed to normal Chatwoot conversations. Instagram comments become independent Chatwoot conversations; the original publication id or URL is preserved in Chatwoot `custom_attributes` and in the visible first message context.
+The webhook router resolves the target `InstagramAccount` by `instagramUserId`, then uses its existing Chatwoot API Channel linkage (`chatwootAccountId`, `chatwootInboxId`, and `Agent.chatwootApiKey`) to create or reuse Chatwoot contacts, contact inboxes, conversations, and messages. Instagram DMs append to the same non-resolved Chatwoot conversation for the same contact and inbox. Instagram comments remain independent Chatwoot conversations; the original publication id or URL is preserved in Chatwoot `custom_attributes` and in the visible first message context.
 
-Duplicate protection uses deterministic Chatwoot `source_id` values derived from Meta ids (`ig:dm:*`, `ig:comment:*`, and `ig:event:*`). Same-payload duplicates are suppressed before delivery, while repeated Meta deliveries rely on those stable source ids being reconciled by Chatwoot.
+DM contact identity uses the Instagram-scoped customer id from Meta webhook payloads. Incoming DMs use `sender.id`; outgoing echo webhooks from the integrated Instagram account use `recipient.id` and are written to Chatwoot with `message_type: "outgoing"`. The router also performs a best-effort Instagram sender profile lookup to populate the Chatwoot contact name, username attributes, and avatar.
+
+Duplicate protection uses deterministic Chatwoot `source_id` values derived from Meta ids (`ig:*:user:*`, `ig:comment:*`, and `ig:event:*`). Same-payload duplicates are suppressed before delivery, while repeated Meta deliveries rely on those stable source ids being reconciled by Chatwoot.
 
 AJAWMRP now publishes the required InstagramAccount Chatwoot linkage fields:
 
@@ -123,7 +125,7 @@ The same public URL, `/integrations/instagram/webhook`, handles all Meta callbac
 
 In Meta Developers, register the exact redirect URL in both the Business/Facebook Login settings and the Instagram Business Login settings. The redirect URL must match `INSTAGRAM_OAUTH_REDIRECT_URI` exactly.
 
-The callback exchanges Meta's `code` for a short-lived Instagram token and stores the connection in AJAWMRP. Long-lived token exchange is optional, best-effort, and controlled by `INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE`; keep it disabled until the app has been validated against Meta's current token-exchange behavior.
+The callback exchanges Meta's `code` for a short-lived Instagram token, optionally exchanges it for a long-lived token, then calls Instagram `/me?fields=user_id,username,name` with the final token. AJAWMRP stores `/me.user_id` as `InstagramAccount.instagramUserId` because it matches webhook `entry.id`; it also stores `name` and `username` when Meta returns them. Long-lived token exchange is controlled by `INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE` and is best-effort.
 
 Historical n8n workflow exports under `references/n8n/` contained operational secrets. Treat those values as compromised: rotate any credentials or tokens that appeared there, scrub references before sharing, and do not use n8n as the runtime owner for this login/callback flow anymore.
 
@@ -153,11 +155,13 @@ The app-owned Instagram Business Login flow was verified with `agentId=1` after 
 {
   "status": "connected",
   "instagramAccountId": 1,
-  "instagramUserId": "35972463999033656",
-  "tokenSource": "short_lived",
+  "instagramUserId": "17841410077817456",
+  "name": "<instagram_profile_name>",
+  "username": "<instagram_username>",
+  "tokenSource": "long_lived",
   "longLivedTokenExchange": {
-    "attempted": false,
-    "succeeded": false
+    "attempted": true,
+    "succeeded": true
   }
 }
 ```
