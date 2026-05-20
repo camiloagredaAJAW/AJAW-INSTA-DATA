@@ -40,7 +40,9 @@ export class ActivateInstagramIntegrationService {
       return failed(agentId, 'agent_not_found');
     }
 
-    const instagramAccount = (await this.axelorClient.searchInstagramAccountsByAgent(agentId, { limit: 1 }))[0] ?? (await this.axelorClient.createInstagramAccount(agentId, randomUUID()));
+    const existingInstagramAccount = (await this.axelorClient.searchInstagramAccountsByAgent(agentId, { limit: 1 }))[0];
+    const instagramAccount = existingInstagramAccount ?? (await this.axelorClient.createInstagramAccount(agentId, randomUUID()));
+    const wasCreatedForActivation = !existingInstagramAccount;
 
     const existingLinkage = existingChatwootLinkage(instagramAccount);
     if (existingLinkage) {
@@ -55,7 +57,7 @@ export class ActivateInstagramIntegrationService {
     }
 
     const missingFields = missingLinkageFields(instagramAccount);
-    if (missingFields.length > 0) {
+    if (!wasCreatedForActivation && missingFields.length > 0) {
       return {
         status: IntegrationStatus.SchemaGap,
         agentId,

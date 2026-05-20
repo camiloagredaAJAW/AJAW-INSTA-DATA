@@ -125,7 +125,7 @@ describe('ActivateInstagramIntegrationService', () => {
     const axelor = axelorMock({
       agent: { id: 7, chatwootApiKey: 'agent-secret' },
       instagramAccounts: [],
-      createdInstagramAccount: publishedInstagramAccount({ id: 12, version: 0 }),
+      createdInstagramAccount: { id: 12, version: 0, agent: { id: 7 }, instagramState: 'state-456', active: false },
     });
     const chatwoot = chatwootMock({ accountId: 42, createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' } });
     const service = createService(axelor, chatwoot);
