@@ -67,14 +67,15 @@ export class ActivateInstagramIntegrationService {
       };
     }
 
-    if (typeof instagramAccount.version !== 'number') {
+    const instagramAccountVersion = typeof instagramAccount.version === 'number' ? instagramAccount.version : wasCreatedForActivation ? 0 : undefined;
+    if (instagramAccountVersion === undefined) {
       return failed(agentId, 'instagram_account_version_missing');
     }
 
     try {
       if (!agent.chatwootApiKey) {
         const reason = 'missing_agent_chatwoot_api_key';
-        await persistFailureSafely(this.axelorClient, instagramAccount.id, instagramAccount.version, reason);
+        await persistFailureSafely(this.axelorClient, instagramAccount.id, instagramAccountVersion, reason);
 
         return failed(agentId, reason, instagramAccount.id);
       }
@@ -90,14 +91,14 @@ export class ActivateInstagramIntegrationService {
 
       const updatedInstagramAccount = await this.axelorClient.updateInstagramAccount(
         instagramAccount.id,
-        instagramAccount.version,
+        instagramAccountVersion,
         buildSuccessfulLinkageUpdate(chatwootAccountId, inbox),
       );
       const persistedInstagramAccount = await this.axelorClient.readInstagramAccount(instagramAccount.id);
 
       if (!isSuccessfulLinkagePersisted(persistedInstagramAccount, chatwootAccountId, inbox)) {
         const reason = 'instagram_account_persistence_failed';
-        await persistFailureSafely(this.axelorClient, instagramAccount.id, persistedInstagramAccount?.version ?? updatedInstagramAccount.version ?? instagramAccount.version, reason);
+        await persistFailureSafely(this.axelorClient, instagramAccount.id, persistedInstagramAccount?.version ?? updatedInstagramAccount.version ?? instagramAccountVersion, reason);
 
         return failed(agentId, reason, instagramAccount.id);
       }
@@ -112,7 +113,7 @@ export class ActivateInstagramIntegrationService {
       };
     } catch (error) {
       const reason = redactFailureReason(error, agent.chatwootApiKey ? [agent.chatwootApiKey] : []);
-      await persistFailureSafely(this.axelorClient, instagramAccount.id, instagramAccount.version, reason);
+      await persistFailureSafely(this.axelorClient, instagramAccount.id, instagramAccountVersion, reason);
 
       return failed(agentId, reason, instagramAccount.id);
     }
