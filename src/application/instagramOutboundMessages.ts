@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
-import { ChatwootMessageSummary, DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
+import { ChatwootConversationSummary, ChatwootMessageSummary, DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
 import { InstagramOAuthClient } from '../infrastructure/meta/instagram-oauth.client';
 import { redactText } from '../shared/redaction';
 
@@ -101,7 +101,8 @@ export class InstagramOutboundMessagesService {
     const routableAccount = account as AxelorInstagramAccountRecord & { instagramUserId: string; accessToken: string };
 
     try {
-      const sendableContent = await this.buildSendableContent(parsed, routableAccount.agent?.chatwootApiKey);
+      const chatwootApiKey = routableAccount.agent?.chatwootApiKey ?? await this.fetchAgentChatwootApiKey(routableAccount.agent?.id);
+      const sendableContent = await this.buildSendableContent(parsed, chatwootApiKey);
       const result = await this.instagramOAuthClient.sendTextMessage(routableAccount.instagramUserId, parsed.recipientId, sendableContent, routableAccount.accessToken);
       if (result.messageId) {
         this.sentInstagramMessageIds.add(result.messageId);
@@ -128,9 +129,28 @@ export class InstagramOutboundMessagesService {
 
     try {
       const messages = await this.chatwootClient.listConversationMessages(Number(parsed.chatwootAccountId), apiKey, parsed.conversationId);
-      return findMessageContent(messages, parsed.replyToMessageId);
+      const quotedMessageContent = findMessageContent(messages, parsed.replyToMessageId);
+      if (quotedMessageContent) {
+        return quotedMessageContent;
+      }
+
+      const conversation = await this.chatwootClient.getConversation(Number(parsed.chatwootAccountId), apiKey, parsed.conversationId);
+      return findMessageContent(conversation.messages ?? [], parsed.replyToMessageId) ?? buildConversationReplyContext(conversation, parsed);
     } catch (error) {
       this.logger.warn(`Chatwoot quoted message lookup skipped: chatwootMessageId=${parsed.chatwootMessageId ?? 'unknown'} reason=${redactText(error instanceof Error ? error.message : String(error))}`);
+      return undefined;
+    }
+  }
+
+  private async fetchAgentChatwootApiKey(agentId: string | number | undefined): Promise<string | undefined> {
+    if (!agentId) {
+      return undefined;
+    }
+
+    try {
+      return nonEmptyString((await this.axelorClient.fetchAgent(agentId))?.chatwootApiKey);
+    } catch (error) {
+      this.logger.warn(`Chatwoot API key lookup skipped for outbound reply context: reason=${redactText(error instanceof Error ? error.message : String(error))}`);
       return undefined;
     }
   }
@@ -275,6 +295,18 @@ function readNested(value: unknown, path: string[]): unknown {
 
 function findMessageContent(messages: ChatwootMessageSummary[], messageId: number): string | undefined {
   return nonEmptyString(messages.find((message) => message.id === messageId)?.content);
+}
+
+function buildConversationReplyContext(conversation: ChatwootConversationSummary, parsed: ParsedChatwootOutboundPayload): string | undefined {
+  const externalId = nonEmptyString(readNested(parsed.payload.content_attributes, ['in_reply_to_external_id']));
+  const publicationUrl = nonEmptyString(conversation.custom_attributes?.instagram_publication_url);
+  const sourceEventId = nonEmptyString(conversation.custom_attributes?.instagram_source_event_id);
+
+  if (externalId && sourceEventId && externalId !== `ig:event:${sourceEventId}`) {
+    return undefined;
+  }
+
+  return publicationUrl ? `Instagram comment on ${publicationUrl}` : undefined;
 }
 
 function formatQuotedReply(quotedContent: string, replyContent: string): string {

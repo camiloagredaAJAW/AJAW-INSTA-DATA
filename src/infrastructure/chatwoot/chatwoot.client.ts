@@ -58,6 +58,8 @@ export interface ChatwootConversationSummary {
   source_id?: string;
   inbox_id?: number;
   status?: string;
+  custom_attributes?: Record<string, unknown>;
+  messages?: ChatwootMessageSummary[];
 }
 
 export interface ChatwootMessageSummary {
@@ -254,6 +256,20 @@ export class DefaultChatwootClient {
     return parseMessageList(await response.json());
   }
 
+  async getConversation(accountId: number, apiAccessToken: string, conversationId: number): Promise<ChatwootConversationSummary> {
+    const path = `/api/v1/accounts/${accountId}/conversations/${conversationId}`;
+    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, path), {
+      method: 'GET',
+      headers: buildChatwootAuthHeaders(apiAccessToken),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chatwoot conversation request failed: method=GET path=${path} status=${response.status}`);
+    }
+
+    return parseConversation(await response.json());
+  }
+
   private readConfig(): ChatwootClientConfig {
     return {
       baseUrl: this.configService.get('CHATWOOT_BASE_URL', { infer: true }),
@@ -446,6 +462,21 @@ function parseConversationList(body: unknown): ChatwootConversationSummary[] {
     const conversation = parseConversationSummary(item);
     return conversation ? [conversation] : [];
   });
+}
+
+function parseConversation(body: unknown): ChatwootConversationSummary {
+  if (!isRecord(body) || typeof body.id !== 'number') {
+    throw new Error('Chatwoot conversation response is missing id');
+  }
+
+  return {
+    id: body.id,
+    source_id: optionalString(body.source_id),
+    inbox_id: optionalNumber(body.inbox_id),
+    status: optionalString(body.status),
+    custom_attributes: isRecord(body.custom_attributes) ? body.custom_attributes : undefined,
+    messages: parseMessageList(body.messages),
+  };
 }
 
 function parseConversationSummary(body: unknown): ChatwootConversationSummary | null {

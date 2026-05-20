@@ -71,6 +71,42 @@ describe('InstagramOutboundMessagesService', () => {
     );
   });
 
+  it('falls back to conversation custom attributes for Chatwoot comment replies when original message is not listed', async () => {
+    const axelorClient = axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', agent: { id: 7 } }, { id: 7, chatwootApiKey: 'agent-secret' });
+    const chatwootClient = chatwootMock(
+      undefined,
+      [],
+      {
+        id: 21,
+        custom_attributes: {
+          instagram_publication_url: 'https://www.instagram.com/p/DYkG5cnDjBp/',
+          instagram_source_event_id: '18317971390259755',
+        },
+        messages: [{ id: 9925, content: 'perdón, es contestando a este mensaje, que pena' }],
+      },
+    );
+    const instagramOAuthClient = oauthMock({ messageId: 'ig-mid-1' });
+    const service = new InstagramOutboundMessagesService(axelorClient, chatwootClient, instagramOAuthClient);
+    const payload = {
+      ...chatwootOutgoingPayload(),
+      content: 'perdón, es contestando a este mensaje, que pena',
+      conversation: { id: 21, contact_inbox: { source_id: 'ig:comment:18317971390259755' } },
+      content_attributes: { in_reply_to: 9922, in_reply_to_external_id: 'ig:event:18317971390259755' },
+    };
+
+    await expect(service.handleChatwootMessageCreated(payload)).resolves.toEqual({ status: 'sent', messageId: 'ig-mid-1' });
+
+    expect(axelorClient.fetchAgent).toHaveBeenCalledWith(7);
+    expect(chatwootClient.listConversationMessages).toHaveBeenCalledWith(50, 'agent-secret', 21);
+    expect(chatwootClient.getConversation).toHaveBeenCalledWith(50, 'agent-secret', 21);
+    expect(instagramOAuthClient.sendTextMessage).toHaveBeenCalledWith(
+      '17841410077817456',
+      '1634976877768677',
+      'En respuesta a:\n> Instagram comment on https://www.instagram.com/p/DYkG5cnDjBp/\n\nperdón, es contestando a este mensaje, que pena',
+      'instagram-token',
+    );
+  });
+
   it('uses inline quoted content when Chatwoot includes it in webhook content_attributes', async () => {
     const axelorClient = axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();
@@ -158,18 +194,23 @@ function chatwootOutgoingPayload() {
   };
 }
 
-function axelorMock(account: { id?: string | number; version?: number; instagramUserId?: string; accessToken?: string; chatwootAccountId?: string | number; chatwootHmacToken?: string; agent?: { id: string | number; chatwootApiKey?: string } } | null) {
+function axelorMock(
+  account: { id?: string | number; version?: number; instagramUserId?: string; accessToken?: string; chatwootAccountId?: string | number; chatwootHmacToken?: string; agent?: { id: string | number; chatwootApiKey?: string } } | null,
+  agent: { id: string | number; chatwootApiKey?: string } | null = null,
+) {
   return {
     login: jest.fn().mockResolvedValue({ jsessionId: 'session-id' }),
     findInstagramAccountByChatwootLinkage: jest.fn().mockResolvedValue(account),
+    fetchAgent: jest.fn().mockResolvedValue(agent),
     updateInstagramAccount: jest.fn().mockResolvedValue(account),
   } as unknown as jest.Mocked<DefaultAxelorClient>;
 }
 
-function chatwootMock(inbox: { id?: number; secret?: string } = {}, messages: Array<{ id: number; content?: string }> = []) {
+function chatwootMock(inbox: { id?: number; secret?: string } = {}, messages: Array<{ id: number; content?: string }> = [], conversation: Record<string, unknown> = { id: 30, messages }) {
   return {
     listInboxes: jest.fn().mockResolvedValue([{ id: inbox.id ?? 78, secret: inbox.secret }]),
     listConversationMessages: jest.fn().mockResolvedValue(messages),
+    getConversation: jest.fn().mockResolvedValue(conversation),
   } as unknown as jest.Mocked<DefaultChatwootClient>;
 }
 
