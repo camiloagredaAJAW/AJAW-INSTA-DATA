@@ -265,7 +265,15 @@ describe('DefaultAxelorClient', () => {
 
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(buildInstagramAccountSearchByStatePayload('state-123'));
     expect(fetcher.mock.calls[1][1]?.method).toBe('PUT');
-    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual(buildCreateInstagramAccountOAuthPlaceholderPayload(7, 'state-456'));
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual({
+      data: {
+        agent: { id: 7 },
+        instagramUserId: 'state-456',
+        instagramState: 'state-456',
+        active: false,
+      },
+    });
+    expect(buildCreateInstagramAccountOAuthPlaceholderPayload(7, 'state-456')).toEqual(JSON.parse(String(fetcher.mock.calls[1][1]?.body)));
     expect(fetcher.mock.calls[2][0]).toBe('https://axelor.test/ws/rest/com.example.db.InstagramAccount');
     expect(fetcher.mock.calls[2][1]?.method).toBe('PUT');
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ data: { id: 12, version: 1, ...buildInstagramAccountOAuthStateUpdate('state-789') } });

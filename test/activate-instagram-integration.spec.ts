@@ -125,7 +125,7 @@ describe('ActivateInstagramIntegrationService', () => {
     const axelor = axelorMock({
       agent: { id: 7, chatwootApiKey: 'agent-secret' },
       instagramAccounts: [],
-      createdInstagramAccount: { id: 12, agent: { id: 7 }, instagramState: 'state-456', active: false },
+      createdInstagramAccount: { id: 12, agent: { id: 7 }, instagramState: 'state-456', instagramUserId: 'state-456', active: false },
     });
     const chatwoot = chatwootMock({ accountId: 42, createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' } });
     const service = createService(axelor, chatwoot);
@@ -141,6 +141,28 @@ describe('ActivateInstagramIntegrationService', () => {
     expect(axelor.createInstagramAccount).toHaveBeenCalledWith(7, expect.any(String));
     expect(chatwoot.getProfile).toHaveBeenCalledWith('agent-secret');
     expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(12, 0, expect.objectContaining({ chatwootIntegrationStatus: IntegrationStatus.Active }));
+  });
+
+  it('keeps bootstrap activation active when a newly created account linkage read-back is incomplete', async () => {
+    const axelor = axelorMock({
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+      instagramAccounts: [],
+      createdInstagramAccount: { id: 12, agent: { id: 7 }, instagramState: 'state-456', instagramUserId: 'state-456', active: false },
+      updatedInstagramAccount: { id: 12, version: 1, agent: { id: 7 }, instagramState: 'state-456', instagramUserId: 'state-456', active: false },
+      readInstagramAccount: { id: 12, version: 1, agent: { id: 7 }, instagramState: 'state-456', instagramUserId: 'state-456', active: false },
+    });
+    const chatwoot = chatwootMock({ accountId: 42, createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' } });
+    const service = createService(axelor, chatwoot);
+
+    await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
+      status: IntegrationStatus.Active,
+      agentId: 7,
+      instagramAccountId: 12,
+      chatwootAccountId: 42,
+      chatwootInboxId: 101,
+      chatwootChannelId: 201,
+    });
+    expect(axelor.updateInstagramAccount).toHaveBeenCalledTimes(1);
   });
 
   it('returns schema_gap and avoids unsafe writes when linkage fields are not published', async () => {

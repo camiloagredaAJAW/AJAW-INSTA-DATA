@@ -464,6 +464,7 @@ export function buildCreateInstagramAccountOAuthPlaceholderPayload(agentId: stri
   return {
     data: {
       agent: { id: agentId },
+      instagramUserId: instagramState,
       instagramState,
       active: false,
     },
