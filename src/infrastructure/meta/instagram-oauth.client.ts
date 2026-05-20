@@ -33,6 +33,13 @@ export interface InstagramMessagingUserProfileResponse {
   profilePic?: string;
 }
 
+export interface InstagramMediaReferenceResponse {
+  id?: string;
+  permalink?: string;
+  caption?: string;
+  mediaUrl?: string;
+}
+
 export interface InstagramSendMessageResponse {
   recipientId?: string;
   messageId?: string;
@@ -130,6 +137,19 @@ export class InstagramOAuthClient {
     return parseMessagingUserProfileResponse(await response.json());
   }
 
+  async fetchMediaReference(mediaId: string, accessToken: string): Promise<InstagramMediaReferenceResponse> {
+    const url = new URL(`https://graph.instagram.com/v25.0/${encodeURIComponent(mediaId)}`);
+    url.searchParams.set('fields', 'id,permalink,caption,media_url');
+    url.searchParams.set('access_token', accessToken);
+
+    const response = await this.fetcher(url.toString(), { method: 'GET' });
+    if (!response.ok) {
+      throw new Error(`Instagram media lookup failed: ${await safeErrorMessage(response)}`);
+    }
+
+    return parseMediaReferenceResponse(await response.json());
+  }
+
   async sendTextMessage(instagramUserId: string, recipientId: string, text: string, accessToken: string): Promise<InstagramSendMessageResponse> {
     const response = await this.fetcher(`https://graph.instagram.com/v25.0/${encodeURIComponent(instagramUserId)}/messages`, {
       method: 'POST',
@@ -216,6 +236,19 @@ function parseMessagingUserProfileResponse(body: unknown): InstagramMessagingUse
     username: typeof body.username === 'string' ? body.username : undefined,
     name: typeof body.name === 'string' ? body.name : undefined,
     profilePic: typeof body.profile_pic === 'string' ? body.profile_pic : undefined,
+  };
+}
+
+function parseMediaReferenceResponse(body: unknown): InstagramMediaReferenceResponse {
+  if (!isRecord(body)) {
+    return {};
+  }
+
+  return {
+    id: typeof body.id === 'string' ? body.id : undefined,
+    permalink: typeof body.permalink === 'string' ? body.permalink : undefined,
+    caption: typeof body.caption === 'string' ? body.caption : undefined,
+    mediaUrl: typeof body.media_url === 'string' ? body.media_url : undefined,
   };
 }
 

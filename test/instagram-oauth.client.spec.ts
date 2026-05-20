@@ -114,6 +114,25 @@ describe('InstagramOAuthClient', () => {
     expect(url.searchParams.get('access_token')).toBe('instagram-token');
   });
 
+  it('fetches Instagram media permalink details for comment context', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: { id: 'media-1', permalink: 'https://instagram.test/p/1', caption: 'Post caption', media_url: 'https://instagram.test/media.jpg' } }),
+    );
+    const client = new InstagramOAuthClient(configService(), fetcher);
+
+    await expect(client.fetchMediaReference('media-1', 'instagram-token')).resolves.toEqual({
+      id: 'media-1',
+      permalink: 'https://instagram.test/p/1',
+      caption: 'Post caption',
+      mediaUrl: 'https://instagram.test/media.jpg',
+    });
+
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.origin + url.pathname).toBe('https://graph.instagram.com/v25.0/media-1');
+    expect(url.searchParams.get('fields')).toBe('id,permalink,caption,media_url');
+    expect(url.searchParams.get('access_token')).toBe('instagram-token');
+  });
+
   it('sends Instagram text messages using the professional account id and scoped recipient id', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(response({ body: { recipient_id: 'recipient-1', message_id: 'mid-1' } }));
     const client = new InstagramOAuthClient(configService(), fetcher);

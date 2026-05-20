@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { IntegrationStatus } from '../domain/integrationStatus';
 import { AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
 import { DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
-import { InstagramMessagingUserProfileResponse, InstagramOAuthClient } from '../infrastructure/meta/instagram-oauth.client';
+import { InstagramMediaReferenceResponse, InstagramMessagingUserProfileResponse, InstagramOAuthClient } from '../infrastructure/meta/instagram-oauth.client';
 import { InstagramOutboundMessagesService } from './instagramOutboundMessages';
 import { redactText } from '../shared/redaction';
 import {
@@ -107,15 +107,16 @@ export class InstagramWebhookRoutingService {
   }
 
   private async deliverEvent(event: NormalizedInstagramWebhookEvent, account: RoutableInstagramAccount): Promise<InstagramWebhookDeliveredEvent> {
+    const enrichedEvent = await this.enrichCommentPublication(event, account);
     const apiKey = account.agent.chatwootApiKey;
     const chatwootAccountId = toPositiveInteger(account.chatwootAccountId, 'chatwootAccountId');
     const chatwootInboxId = toPositiveInteger(account.chatwootInboxId, 'chatwootInboxId');
-    const contactSourceId = buildContactSourceId(event.senderId);
-    const contactInboxSourceId = buildContactInboxSourceId(event.instagramAccountId, event.senderId);
-    const messageSourceId = buildMessageSourceId(event.sourceEventId);
-    const senderProfile = event.kind === 'dm' ? await this.fetchSenderProfile(event, account) : {};
+    const contactSourceId = buildContactSourceId(enrichedEvent.senderId);
+    const contactInboxSourceId = buildContactInboxSourceId(enrichedEvent.instagramAccountId, enrichedEvent.senderId);
+    const messageSourceId = buildMessageSourceId(enrichedEvent.sourceEventId);
+    const senderProfile = enrichedEvent.kind === 'dm' ? await this.fetchSenderProfile(enrichedEvent, account) : {};
 
-    const contact = await this.findOrCreateContact(chatwootAccountId, apiKey, chatwootInboxId, contactSourceId, event, senderProfile);
+    const contact = await this.findOrCreateContact(chatwootAccountId, apiKey, chatwootInboxId, contactSourceId, enrichedEvent, senderProfile);
     const existingContactInboxSourceId = contact.contact_inboxes?.find((link) => link.inbox?.id === chatwootInboxId)?.source_id;
     const contactInbox = existingContactInboxSourceId
       ? { id: undefined, source_id: existingContactInboxSourceId }
@@ -124,16 +125,30 @@ export class InstagramWebhookRoutingService {
           inbox_id: chatwootInboxId,
           source_id: contactInboxSourceId,
         });
-    const conversationSourceId = buildConversationSourceId(event, contactInbox.source_id ?? contactInboxSourceId);
-    const conversation = await this.findOrCreateConversation(chatwootAccountId, apiKey, chatwootInboxId, contact.id, contactInbox.id, event, conversationSourceId);
+    const conversationSourceId = buildConversationSourceId(enrichedEvent, contactInbox.source_id ?? contactInboxSourceId);
+    const conversation = await this.findOrCreateConversation(chatwootAccountId, apiKey, chatwootInboxId, contact.id, contactInbox.id, enrichedEvent, conversationSourceId);
     await this.chatwootClient.createIncomingMessage(chatwootAccountId, apiKey, conversation.id, {
-      content: buildVisibleMessageContent(event),
+      content: buildVisibleMessageContent(enrichedEvent),
       source_id: messageSourceId,
-      message_type: event.direction,
-      content_attributes: buildMessageAttributes(event),
+      message_type: enrichedEvent.direction,
+      content_attributes: buildMessageAttributes(enrichedEvent),
     });
 
-    return { kind: event.kind, sourceEventId: event.sourceEventId, conversationSourceId, messageSourceId };
+    return { kind: enrichedEvent.kind, sourceEventId: enrichedEvent.sourceEventId, conversationSourceId, messageSourceId };
+  }
+
+  private async enrichCommentPublication(event: NormalizedInstagramWebhookEvent, account: RoutableInstagramAccount): Promise<NormalizedInstagramWebhookEvent> {
+    if (event.kind !== 'comment' || event.publication?.url || !event.publication?.id || !account.accessToken) {
+      return event;
+    }
+
+    try {
+      const media = await this.instagramOAuthClient.fetchMediaReference(event.publication.id, account.accessToken);
+      return mergeMediaReference(event, media);
+    } catch (error) {
+      this.logger.warn(`Instagram publication lookup skipped: mediaId=${event.publication.id} reason=${redactText(error instanceof Error ? error.message : String(error))}`);
+      return event;
+    }
   }
 
   private async findOrCreateConversation(
@@ -440,6 +455,7 @@ function buildMessageAttributes(event: NormalizedInstagramWebhookEvent): Record<
     instagram_event_kind: event.kind,
     instagram_source_event_id: event.sourceEventId,
     ...(event.mediaUrl ? { instagram_media_url: event.mediaUrl } : {}),
+    ...(event.publication?.url ? { instagram_publication_url: event.publication.url } : {}),
   };
 }
 
@@ -450,6 +466,19 @@ function buildVisibleMessageContent(event: NormalizedInstagramWebhookEvent): str
 
   const context = event.publication?.url ?? event.publication?.id;
   return context ? `Instagram comment on ${context}\n\n${event.text}` : `Instagram comment\n\n${event.text}`;
+}
+
+function mergeMediaReference(event: NormalizedInstagramWebhookEvent, media: InstagramMediaReferenceResponse): NormalizedInstagramWebhookEvent {
+  return {
+    ...event,
+    mediaUrl: event.mediaUrl ?? media.mediaUrl,
+    publication: {
+      ...event.publication,
+      id: event.publication?.id ?? media.id,
+      url: event.publication?.url ?? media.permalink,
+      caption: event.publication?.caption ?? media.caption,
+    },
+  };
 }
 
 function toPositiveInteger(value: unknown, label: string): number {

@@ -216,25 +216,48 @@ describe('InstagramWebhookRoutingService', () => {
   });
 
   it('routes comments as independent conversations with visible publication context and custom attributes', async () => {
-    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();
-    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock());
+    const instagramOAuthClient = oauthMock({}, { id: 'media-1', permalink: 'https://instagram.test/p/1', caption: 'Post caption', mediaUrl: 'https://instagram.test/media.jpg' });
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, instagramOAuthClient);
 
-    await expect(service.route({ payload: commentPayload() })).resolves.toMatchObject({ status: 'processed' });
+    await expect(service.route({ payload: commentPayloadWithoutPermalink() })).resolves.toMatchObject({ status: 'processed' });
 
+    expect(instagramOAuthClient.fetchMediaReference).toHaveBeenCalledWith('media-1', 'instagram-token');
     expect(chatwootClient.createConversation).toHaveBeenCalledWith(
       1,
       'agent-secret',
       expect.objectContaining({
         source_id: 'ig:comment:comment-1',
-        custom_attributes: expect.objectContaining({ instagram_publication_url: 'https://instagram.test/p/1' }),
+        custom_attributes: expect.objectContaining({ instagram_publication_url: 'https://instagram.test/p/1', instagram_publication_caption: 'Post caption' }),
       }),
     );
     expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(
       1,
       'agent-secret',
       30,
-      expect.objectContaining({ content: 'Instagram comment on https://instagram.test/p/1\n\nNice post', source_id: 'ig:event:comment-1' }),
+      expect.objectContaining({
+        content: 'Instagram comment on https://instagram.test/p/1\n\nNice post',
+        source_id: 'ig:event:comment-1',
+        content_attributes: expect.objectContaining({ instagram_publication_url: 'https://instagram.test/p/1', instagram_media_url: 'https://instagram.test/media.jpg' }),
+      }),
+    );
+  });
+
+  it('keeps comment media id as fallback when publication permalink lookup is unavailable', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    const instagramOAuthClient = oauthMock();
+    instagramOAuthClient.fetchMediaReference.mockRejectedValueOnce(new Error('Graph token=instagram-token failed'));
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, instagramOAuthClient);
+
+    await expect(service.route({ payload: commentPayloadWithoutPermalink() })).resolves.toMatchObject({ status: 'processed', failures: [] });
+
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(
+      1,
+      'agent-secret',
+      30,
+      expect.objectContaining({ content: 'Instagram comment on media-1\n\nNice post', source_id: 'ig:event:comment-1' }),
     );
   });
 
@@ -282,13 +305,13 @@ function outgoingDmPayload() {
   };
 }
 
-function commentPayload() {
+function commentPayloadWithoutPermalink() {
   return {
     object: 'instagram',
     entry: [
       {
         id: 'ig-account-1',
-        changes: [{ field: 'comments', value: { id: 'comment-1', text: 'Nice post', from: { id: 'sender-2' }, media: { id: 'media-1', permalink: 'https://instagram.test/p/1' } } }],
+        changes: [{ field: 'comments', value: { id: 'comment-1', text: 'Nice post', from: { id: 'sender-2' }, media: { id: 'media-1' } } }],
       },
     ],
   };
@@ -317,8 +340,12 @@ function chatwootMock() {
   } as unknown as jest.Mocked<DefaultChatwootClient>;
 }
 
-function oauthMock(profile: Awaited<ReturnType<InstagramOAuthClient['fetchMessagingUserProfile']>> = {}) {
+function oauthMock(
+  profile: Awaited<ReturnType<InstagramOAuthClient['fetchMessagingUserProfile']>> = {},
+  media: Awaited<ReturnType<InstagramOAuthClient['fetchMediaReference']>> = {},
+) {
   return {
     fetchMessagingUserProfile: jest.fn().mockResolvedValue(profile),
+    fetchMediaReference: jest.fn().mockResolvedValue(media),
   } as unknown as jest.Mocked<InstagramOAuthClient>;
 }
