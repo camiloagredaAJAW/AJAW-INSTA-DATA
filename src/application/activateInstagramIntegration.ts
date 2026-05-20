@@ -96,7 +96,10 @@ export class ActivateInstagramIntegrationService {
       );
       const persistedInstagramAccount = await this.axelorClient.readInstagramAccount(instagramAccount.id);
 
-      if (!isSuccessfulLinkagePersisted(persistedInstagramAccount, chatwootAccountId, inbox)) {
+      const linkageConfirmed = isSuccessfulLinkagePersisted(persistedInstagramAccount, chatwootAccountId, inbox)
+        || isSuccessfulLinkagePersisted(updatedInstagramAccount, chatwootAccountId, inbox);
+
+      if (!linkageConfirmed) {
         const reason = 'instagram_account_persistence_failed';
         await persistFailureSafely(this.axelorClient, instagramAccount.id, persistedInstagramAccount?.version ?? updatedInstagramAccount.version ?? instagramAccountVersion, reason);
 

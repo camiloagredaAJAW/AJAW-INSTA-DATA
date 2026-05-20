@@ -293,6 +293,7 @@ describe('ActivateInstagramIntegrationService', () => {
     const axelor = axelorMock({
       agent: { id: 7, chatwootApiKey: 'agent-secret' },
       instagramAccounts: [publishedInstagramAccount({ id: 11, version: 3 })],
+      updatedInstagramAccount: publishedInstagramAccount({ id: 11, version: 4, chatwootAccountId: 42, chatwootInboxId: undefined, chatwootChannelId: 201, chatwootIntegrationStatus: IntegrationStatus.Active }),
       readInstagramAccount: publishedInstagramAccount({ id: 11, version: 4, chatwootAccountId: 42, chatwootInboxId: undefined, chatwootChannelId: 201, chatwootIntegrationStatus: IntegrationStatus.Active }),
     });
     const chatwoot = chatwootMock({
@@ -319,6 +320,30 @@ describe('ActivateInstagramIntegrationService', () => {
         chatwootLastIntegrationError: 'instagram_account_persistence_failed',
       }),
     );
+  });
+
+  it('returns active when update response confirms linkage even if read-back omits fields', async () => {
+    const axelor = axelorMock({
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+      instagramAccounts: [publishedInstagramAccount({ id: 11, version: 3 })],
+      readInstagramAccount: publishedInstagramAccount({ id: 11, version: 4, chatwootAccountId: 42, chatwootInboxId: undefined, chatwootChannelId: 201, chatwootIntegrationStatus: IntegrationStatus.Active }),
+    });
+    const chatwoot = chatwootMock({
+      accountId: 42,
+      createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', hmac_token: 'hmac-secret' },
+    });
+    const service = createService(axelor, chatwoot);
+
+    await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
+      status: IntegrationStatus.Active,
+      agentId: 7,
+      instagramAccountId: 11,
+      chatwootAccountId: 42,
+      chatwootInboxId: 101,
+      chatwootChannelId: 201,
+    });
+    expect(axelor.readInstagramAccount).toHaveBeenCalledWith(11);
+    expect(axelor.updateInstagramAccount).toHaveBeenCalledTimes(1);
   });
 
   it('persists failed provisioning errors without leaking known secrets', async () => {
@@ -468,7 +493,7 @@ function axelorMock(options: AxelorMockOptions = {}) {
         version: typeof currentInstagramAccount?.version === 'number' ? currentInstagramAccount.version + 1 : version + 1,
       };
 
-      return Promise.resolve(currentInstagramAccount);
+      return Promise.resolve(options.updatedInstagramAccount ?? currentInstagramAccount);
     }),
     readInstagramAccount: jest.fn().mockImplementation(() => Promise.resolve(options.readInstagramAccount ?? currentInstagramAccount)),
   } as unknown as jest.Mocked<DefaultAxelorClient>;
@@ -519,6 +544,7 @@ interface AxelorMockOptions {
   instagramAccounts?: Array<Record<string, unknown>>;
   readInstagramAccount?: Record<string, unknown> | null;
   createdInstagramAccount?: Record<string, unknown>;
+  updatedInstagramAccount?: Record<string, unknown>;
 }
 
 interface ChatwootMockOptions {
