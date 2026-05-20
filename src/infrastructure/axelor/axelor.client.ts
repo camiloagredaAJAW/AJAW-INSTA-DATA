@@ -288,8 +288,8 @@ export class DefaultAxelorClient {
 
   async updateInstagramAccount(id: string | number, version: number, data: Record<string, unknown>): Promise<AxelorInstagramAccountRecord> {
     const config = this.readConfig();
-    const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/${id}`, {
-      method: 'POST',
+    const response = await this.fetcher(modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName), {
+      method: 'PUT',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',

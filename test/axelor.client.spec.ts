@@ -266,6 +266,8 @@ describe('DefaultAxelorClient', () => {
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(buildInstagramAccountSearchByStatePayload('state-123'));
     expect(fetcher.mock.calls[1][1]?.method).toBe('PUT');
     expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual(buildCreateInstagramAccountOAuthPlaceholderPayload(7, 'state-456'));
+    expect(fetcher.mock.calls[2][0]).toBe('https://axelor.test/ws/rest/com.example.db.InstagramAccount');
+    expect(fetcher.mock.calls[2][1]?.method).toBe('PUT');
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ data: { id: 12, version: 1, ...buildInstagramAccountOAuthStateUpdate('state-789') } });
   });
 
@@ -294,7 +296,7 @@ describe('DefaultAxelorClient', () => {
     });
   });
 
-  it('uses id/version safe write shape for InstagramAccount updates', async () => {
+  it('uses collection PUT with id/version safe write shape for InstagramAccount updates', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
       response({
         body: { data: { id: 11, version: 4, chatwootInboxId: 22 } },
@@ -309,6 +311,8 @@ describe('DefaultAxelorClient', () => {
     });
 
     expect(fetcher.mock.calls[0][1]?.headers).toEqual(expect.objectContaining({ Authorization: buildBasicAuthHeader('user', 'pass') }));
+    expect(fetcher.mock.calls[0][0]).toBe('https://axelor.test/ws/rest/com.example.db.InstagramAccount');
+    expect(fetcher.mock.calls[0][1]?.method).toBe('PUT');
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({
       data: {
         id: 11,
