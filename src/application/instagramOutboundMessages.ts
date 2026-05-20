@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
-import { DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
+import { ChatwootMessageSummary, DefaultChatwootClient } from '../infrastructure/chatwoot/chatwoot.client';
 import { InstagramOAuthClient } from '../infrastructure/meta/instagram-oauth.client';
 import { redactText } from '../shared/redaction';
 
@@ -9,6 +9,7 @@ export interface ChatwootMessageCreatedPayload {
   event?: string;
   id?: string | number;
   content?: string;
+  content_attributes?: Record<string, unknown>;
   message_type?: string;
   private?: boolean;
   source_id?: string | null;
@@ -16,6 +17,7 @@ export interface ChatwootMessageCreatedPayload {
   account?: { id?: string | number };
   contact?: { identifier?: string | null };
   conversation?: {
+    id?: string | number;
     contact_inbox?: { source_id?: string | null };
     meta?: { sender?: { identifier?: string | null } };
   };
@@ -99,17 +101,37 @@ export class InstagramOutboundMessagesService {
     const routableAccount = account as AxelorInstagramAccountRecord & { instagramUserId: string; accessToken: string };
 
     try {
-      const result = await this.instagramOAuthClient.sendTextMessage(routableAccount.instagramUserId, parsed.recipientId, parsed.content, routableAccount.accessToken);
+      const sendableContent = await this.buildSendableContent(parsed, routableAccount.agent?.chatwootApiKey);
+      const result = await this.instagramOAuthClient.sendTextMessage(routableAccount.instagramUserId, parsed.recipientId, sendableContent, routableAccount.accessToken);
       if (result.messageId) {
         this.sentInstagramMessageIds.add(result.messageId);
       }
-      this.recentOutboundFingerprints.set(buildOutboundFingerprint(parsed.recipientId, parsed.content), Date.now());
+      this.recentOutboundFingerprints.set(buildOutboundFingerprint(parsed.recipientId, sendableContent), Date.now());
       this.logger.log(`Chatwoot outbound message sent to Instagram: chatwootMessageId=${parsed.chatwootMessageId ?? 'unknown'} recipientId=${parsed.recipientId}`);
       return { status: 'sent', messageId: result.messageId };
     } catch (error) {
       const safeReason = redactText(error instanceof Error ? error.message : String(error));
       this.logger.error(`Chatwoot outbound message failed: chatwootMessageId=${parsed.chatwootMessageId ?? 'unknown'} reason=${safeReason}`);
       return { status: 'failed', reason: safeReason };
+    }
+  }
+
+  private async buildSendableContent(parsed: ParsedChatwootOutboundPayload, apiKey: string | undefined): Promise<string> {
+    const quotedContent = extractInlineQuotedContent(parsed.payload) ?? await this.fetchQuotedContent(parsed, apiKey);
+    return quotedContent ? formatQuotedReply(quotedContent, parsed.content) : parsed.content;
+  }
+
+  private async fetchQuotedContent(parsed: ParsedChatwootOutboundPayload, apiKey: string | undefined): Promise<string | undefined> {
+    if (!apiKey || !parsed.replyToMessageId || !parsed.conversationId) {
+      return undefined;
+    }
+
+    try {
+      const messages = await this.chatwootClient.listConversationMessages(Number(parsed.chatwootAccountId), apiKey, parsed.conversationId);
+      return findMessageContent(messages, parsed.replyToMessageId);
+    } catch (error) {
+      this.logger.warn(`Chatwoot quoted message lookup skipped: chatwootMessageId=${parsed.chatwootMessageId ?? 'unknown'} reason=${redactText(error instanceof Error ? error.message : String(error))}`);
+      return undefined;
     }
   }
 
@@ -191,9 +213,12 @@ function parseChatwootOutboundPayload(payload: ChatwootMessageCreatedPayload): P
   }
 
   return {
+    payload,
     chatwootMessageId: payload.id,
     chatwootAccountId,
     chatwootInboxId,
+    conversationId: positiveNumber(payload.conversation?.id),
+    replyToMessageId: positiveNumber(readNested(payload.content_attributes, ['in_reply_to', 'id']) ?? payload.content_attributes?.in_reply_to),
     recipientId,
     content,
   };
@@ -232,10 +257,45 @@ function positiveId(value: unknown): string | number | undefined {
   return typeof numeric === 'number' && Number.isInteger(numeric) && numeric > 0 ? numeric : undefined;
 }
 
+function positiveNumber(value: unknown): number | undefined {
+  const numeric = typeof value === 'string' && value.trim() ? Number(value) : value;
+  return typeof numeric === 'number' && Number.isInteger(numeric) && numeric > 0 ? numeric : undefined;
+}
+
+function extractInlineQuotedContent(payload: ChatwootMessageCreatedPayload): string | undefined {
+  return nonEmptyString(readNested(payload.content_attributes, ['in_reply_to', 'content']))
+    ?? nonEmptyString(readNested(payload.content_attributes, ['quoted_message', 'content']))
+    ?? nonEmptyString(readNested(payload.content_attributes, ['reply_to', 'content']))
+    ?? nonEmptyString(readNested(payload.content_attributes, ['parent_message', 'content']));
+}
+
+function readNested(value: unknown, path: string[]): unknown {
+  return path.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), value);
+}
+
+function findMessageContent(messages: ChatwootMessageSummary[], messageId: number): string | undefined {
+  return nonEmptyString(messages.find((message) => message.id === messageId)?.content);
+}
+
+function formatQuotedReply(quotedContent: string, replyContent: string): string {
+  return `En respuesta a:\n${quotePlainText(quotedContent)}\n\n${replyContent}`;
+}
+
+function quotePlainText(content: string): string {
+  return content.split(/\r?\n/).map((line) => `> ${line}`).join('\n');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 interface ParsedChatwootOutboundPayload {
+  payload: ChatwootMessageCreatedPayload;
   chatwootMessageId?: string | number;
   chatwootAccountId: string | number;
   chatwootInboxId: string | number;
+  conversationId?: number;
+  replyToMessageId?: number;
   recipientId: string;
   content: string;
 }
