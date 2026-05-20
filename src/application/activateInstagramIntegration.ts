@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'node:crypto';
 import { EnvironmentConfig } from '../config/environment';
 import { IntegrationStatus } from '../domain/integrationStatus';
 import { AxelorClient, AxelorInstagramAccountRecord, DefaultAxelorClient } from '../infrastructure/axelor/axelor.client';
@@ -39,10 +40,7 @@ export class ActivateInstagramIntegrationService {
       return failed(agentId, 'agent_not_found');
     }
 
-    const instagramAccount = (await this.axelorClient.searchInstagramAccountsByAgent(agentId, { limit: 1 }))[0];
-    if (!instagramAccount) {
-      return failed(agentId, 'instagram_account_not_found');
-    }
+    const instagramAccount = (await this.axelorClient.searchInstagramAccountsByAgent(agentId, { limit: 1 }))[0] ?? (await this.axelorClient.createInstagramAccount(agentId, randomUUID()));
 
     const existingLinkage = existingChatwootLinkage(instagramAccount);
     if (existingLinkage) {

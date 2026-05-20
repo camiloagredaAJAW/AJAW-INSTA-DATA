@@ -264,8 +264,18 @@ describe('DefaultAxelorClient', () => {
     await expect(client.updateInstagramAccountOAuthState(12, 1, 'state-789')).resolves.toEqual({ id: 12, version: 2, instagramState: 'state-789', active: false });
 
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(buildInstagramAccountSearchByStatePayload('state-123'));
+    expect(fetcher.mock.calls[1][1]?.method).toBe('PUT');
     expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual(buildCreateInstagramAccountOAuthPlaceholderPayload(7, 'state-456'));
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ data: { id: 12, version: 1, ...buildInstagramAccountOAuthStateUpdate('state-789') } });
+  });
+
+  it('parses Axelor PUT create responses wrapped in a top-level status array', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({ body: [{ status: 0, data: [{ id: 12, version: 0, instagramState: 'state-456', active: false }] }] }),
+    );
+    const client = new DefaultAxelorClient(configService(), fetcher);
+
+    await expect(client.createInstagramAccount(7, 'state-456')).resolves.toEqual({ id: 12, version: 0, instagramState: 'state-456', active: false });
   });
 
   it('builds connected account updates without OAuth state or optional empty expiry', () => {

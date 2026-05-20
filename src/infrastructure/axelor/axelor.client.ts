@@ -265,7 +265,7 @@ export class DefaultAxelorClient {
   async createInstagramAccount(agentId: string | number, instagramState: string): Promise<AxelorInstagramAccountRecord> {
     const config = this.readConfig();
     const response = await this.fetcher(modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName), {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -596,6 +596,17 @@ function getSetCookieHeaders(headers: HeadersLike): string[] {
 }
 
 function parseAxelorData<T>(body: unknown): T | null {
+  if (Array.isArray(body)) {
+    const first = body.find(isRecord);
+    if (first && Array.isArray(first.data)) {
+      return (first.data[0] as T | undefined) ?? null;
+    }
+
+    if (first && isRecord(first.data)) {
+      return first.data as T;
+    }
+  }
+
   if (!isRecord(body)) {
     return null;
   }

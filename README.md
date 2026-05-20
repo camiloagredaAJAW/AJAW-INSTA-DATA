@@ -77,7 +77,7 @@ Request body:
 { "agentId": 7 }
 ```
 
-The activation use case logs in to AJAWMRP, resolves the Agent and its InstagramAccount, then reuses or creates a Chatwoot API Channel inbox. It prefers the published `InstagramAccount.chatwootAccountId` when it is a positive ID; it calls Chatwoot profile only as a fallback when that stored account ID is missing or invalid and `Agent.chatwootApiKey` is available.
+The activation use case logs in to AJAWMRP, resolves the Agent, creates an inactive InstagramAccount placeholder when none exists yet, then reuses or creates a Chatwoot API Channel inbox. It prefers the published `InstagramAccount.chatwootAccountId` when it is a positive ID; it calls Chatwoot profile only as a fallback when that stored account ID is missing or invalid and `Agent.chatwootApiKey` is available.
 
 ## Instagram webhook setup in Meta Developers
 

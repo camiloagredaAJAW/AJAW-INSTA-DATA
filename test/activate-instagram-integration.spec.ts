@@ -121,18 +121,26 @@ describe('ActivateInstagramIntegrationService', () => {
     );
   });
 
-  it('returns failed when InstagramAccount is missing', async () => {
-    const axelor = axelorMock({ agent: { id: 7, chatwootApiKey: 'agent-secret' }, instagramAccounts: [] });
-    const chatwoot = chatwootMock();
+  it('creates an InstagramAccount placeholder when missing and continues provisioning', async () => {
+    const axelor = axelorMock({
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+      instagramAccounts: [],
+      createdInstagramAccount: publishedInstagramAccount({ id: 12, version: 0 }),
+    });
+    const chatwoot = chatwootMock({ accountId: 42, createdInbox: { id: 101, channel_id: 201, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' } });
     const service = createService(axelor, chatwoot);
 
-    await expect(service.execute({ agentId: 7 })).resolves.toEqual({
-      status: IntegrationStatus.Failed,
+    await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
+      status: IntegrationStatus.Active,
       agentId: 7,
-      reason: 'instagram_account_not_found',
+      instagramAccountId: 12,
+      chatwootAccountId: 42,
+      chatwootInboxId: 101,
     });
 
-    expect(chatwoot.getProfile).not.toHaveBeenCalled();
+    expect(axelor.createInstagramAccount).toHaveBeenCalledWith(7, expect.any(String));
+    expect(chatwoot.getProfile).toHaveBeenCalledWith('agent-secret');
+    expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(12, 0, expect.objectContaining({ chatwootIntegrationStatus: IntegrationStatus.Active }));
   });
 
   it('returns schema_gap and avoids unsafe writes when linkage fields are not published', async () => {
@@ -436,12 +444,22 @@ describe('POST /integrations/instagram/activate', () => {
 });
 
 function axelorMock(options: AxelorMockOptions = {}) {
-  let currentInstagramAccount = options.instagramAccounts?.[0] ? { ...options.instagramAccounts[0] } : null;
+  let currentInstagramAccount = options.instagramAccounts?.[0] ? { ...options.instagramAccounts[0] } : options.createdInstagramAccount ? { ...options.createdInstagramAccount } : null;
 
   return {
     login: jest.fn().mockResolvedValue({ jsessionId: 'session-id' }),
     fetchAgent: jest.fn().mockResolvedValue(options.agent ?? null),
     searchInstagramAccountsByAgent: jest.fn().mockResolvedValue(options.instagramAccounts ?? []),
+    createInstagramAccount: jest.fn().mockImplementation((_agentId: string | number, instagramState: string) => {
+      currentInstagramAccount = {
+        ...publishedInstagramAccount({ id: 12, version: 0 }),
+        ...(options.createdInstagramAccount ?? {}),
+        instagramState,
+        active: false,
+      };
+
+      return Promise.resolve(currentInstagramAccount);
+    }),
     updateInstagramAccount: jest.fn().mockImplementation((id: string | number, version: number, data: Record<string, unknown>) => {
       currentInstagramAccount = {
         ...(currentInstagramAccount ?? {}),
@@ -500,6 +518,7 @@ interface AxelorMockOptions {
   agent?: { id: string | number; chatwootApiKey?: string } | null;
   instagramAccounts?: Array<Record<string, unknown>>;
   readInstagramAccount?: Record<string, unknown> | null;
+  createdInstagramAccount?: Record<string, unknown>;
 }
 
 interface ChatwootMockOptions {
