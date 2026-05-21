@@ -121,7 +121,7 @@ When those fields are present in the returned InstagramAccount shape, activation
 
 After creating or reusing a Chatwoot inbox, the service reads `InstagramAccount` back from AJAWMRP and returns `active` only if persisted Chatwoot IDs/status match the expected values.
 
-Chatwoot API Channel inboxes are named from the Instagram account display name and end with `IG`, for example `Chakana Geodesic Domes IG`. If another API inbox already uses that name, the service appends a numeric suffix like `Chakana Geodesic Domes IG 2`.
+Chatwoot API Channel inboxes are named from the Instagram account display name and end with `IG`, for example `My Company Name IG`. If another API inbox already uses that name, the service appends a numeric suffix like `My Company Name IG 2`.
 
 ## Instagram Business Login
 
@@ -142,8 +142,6 @@ The same public URL, `/integrations/instagram/webhook`, handles all Meta callbac
 In Meta Developers, register the exact redirect URL in both the Business/Facebook Login settings and the Instagram Business Login settings. The redirect URL must match `INSTAGRAM_OAUTH_REDIRECT_URI` exactly.
 
 The callback exchanges Meta's `code` for a short-lived Instagram token, optionally exchanges it for a long-lived token, then calls Instagram `/me?fields=user_id,username,name` with the final token. AJAWMRP stores `/me.user_id` as `InstagramAccount.instagramUserId` because it matches webhook `entry.id`; it also stores `name` and `username` when Meta returns them. Long-lived token exchange is controlled by `INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE` and is best-effort.
-
-Historical n8n workflow exports under `references/n8n/` contained operational secrets. Treat those values as compromised: rotate any credentials or tokens that appeared there, scrub references before sharing, and do not use n8n as the runtime owner for this login/callback flow anymore.
 
 ## Verified real activation
 
@@ -171,7 +169,7 @@ The app-owned Instagram Business Login flow was verified with `agentId=1` after 
 {
   "status": "connected",
   "instagramAccountId": 1,
-  "instagramUserId": "17841410077817456",
+  "instagramUserId": "<instagram_user_id>",
   "name": "<instagram_profile_name>",
   "username": "<instagram_username>",
   "tokenSource": "long_lived",
