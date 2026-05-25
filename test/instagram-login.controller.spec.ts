@@ -60,6 +60,35 @@ describe('GET /integrations/instagram/login', () => {
     expect(loginService.start).toHaveBeenCalledWith({ agentId: '7' });
   });
 
+  it('returns the generated Instagram OAuth URL as JSON when requested', async () => {
+    await request(app.getHttpServer())
+      .get('/integrations/instagram/login')
+      .set('x-internal-api-key', 'test-internal-key')
+      .query({ agentId: '7', response: 'json' })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          authorizationUrl: AUTHORIZE_URL,
+          state: 'state-123',
+          agentId: '7',
+          instagramAccountId: 11,
+        });
+      });
+
+    expect(loginService.start).toHaveBeenCalledWith({ agentId: '7' });
+  });
+
+  it('also supports mode=json for integration tools that reserve response', async () => {
+    await request(app.getHttpServer())
+      .get('/integrations/instagram/login')
+      .set('x-internal-api-key', 'test-internal-key')
+      .query({ agentId: '7', mode: 'json' })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.authorizationUrl).toBe(AUTHORIZE_URL);
+      });
+  });
+
   it('rejects missing agentId before starting OAuth login', async () => {
     await request(app.getHttpServer()).get('/integrations/instagram/login').set('x-internal-api-key', 'test-internal-key').expect(400);
 

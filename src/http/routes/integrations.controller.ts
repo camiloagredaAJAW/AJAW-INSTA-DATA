@@ -23,6 +23,8 @@ export class IntegrationsController {
   async login(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Query('agentId') agentId: string | undefined,
+    @Query('response') responseMode: string | undefined,
+    @Query('mode') mode: string | undefined,
     @Res() response: Response,
   ): Promise<void> {
     this.assertInternalApiKey(headers['x-internal-api-key'] ?? headers['internal-api-key']);
@@ -34,6 +36,17 @@ export class IntegrationsController {
     try {
       this.logger.log(`Instagram login start requested: agentId=${agentId}`);
       const result = await this.instagramBusinessLogin.start({ agentId });
+      if (isJsonLoginResponseRequested(responseMode, mode)) {
+        this.logger.log(`Instagram login authorization URL generated: agentId=${agentId} instagramAccountId=${result.instagramAccountId}`);
+        response.status(200).json({
+          authorizationUrl: result.authorizeUrl,
+          state: result.state,
+          agentId,
+          instagramAccountId: result.instagramAccountId,
+        });
+        return;
+      }
+
       this.logger.log(`Instagram login redirect generated: agentId=${agentId} instagramAccountId=${result.instagramAccountId}`);
       response.redirect(result.authorizeUrl);
     } catch (error) {
@@ -71,4 +84,8 @@ export class IntegrationsController {
       throw new UnauthorizedException('Invalid internal API key');
     }
   }
+}
+
+function isJsonLoginResponseRequested(responseMode: string | undefined, mode: string | undefined): boolean {
+  return [responseMode, mode].some((value) => typeof value === 'string' && value.trim().toLowerCase() === 'json');
 }
