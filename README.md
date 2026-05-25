@@ -133,6 +133,35 @@ For manual Postman testing:
 2. Disable automatic redirects in Postman so the `302 Location` header is visible.
 3. Copy the `Location` URL into a browser and complete the Meta login flow there.
 
+For n8n or other orchestration tools, avoid redirect chains before Meta OAuth. Meta can reject or mis-handle multi-redirect authorization flows, so the final browser redirect should go directly to the Meta authorization URL.
+
+Use JSON mode to fetch the authorization URL without issuing the app-owned `302` redirect:
+
+```http
+GET https://<public-host>/integrations/instagram/login?agentId=<agent-id>&response=json
+x-internal-api-key: <internal-api-key>
+```
+
+Equivalent compatibility form:
+
+```http
+GET https://<public-host>/integrations/instagram/login?agentId=<agent-id>&mode=json
+x-internal-api-key: <internal-api-key>
+```
+
+Response:
+
+```json
+{
+  "authorizationUrl": "https://www.instagram.com/oauth/authorize?...",
+  "state": "<oauth-state>",
+  "agentId": "<agent-id>",
+  "instagramAccountId": "<instagram-account-id>"
+}
+```
+
+Then have n8n redirect the user's browser directly to `authorizationUrl`. Keep the default endpoint without `response=json` for browser/Postman flows that intentionally expect a `302`.
+
 The same public URL, `/integrations/instagram/webhook`, handles all Meta callbacks:
 
 - GET webhook verification with `hub.challenge` returns the challenge when `META_WEBHOOK_VERIFY_TOKEN` matches.
