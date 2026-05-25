@@ -36,6 +36,12 @@ export interface CreateChatwootApiInboxPayload {
   };
 }
 
+export interface UpdateChatwootApiInboxPayload {
+  channel: {
+    webhook_url: string;
+  };
+}
+
 export interface ChatwootContactSummary {
   id: number;
   identifier?: string;
@@ -164,6 +170,24 @@ export class DefaultChatwootClient {
 
     if (!response.ok) {
       throw new Error(`Chatwoot API inbox create request failed with status ${response.status}`);
+    }
+
+    return parseInbox(await response.json());
+  }
+
+  async updateApiInbox(accountId: number, apiAccessToken: string, inboxId: number, payload: UpdateChatwootApiInboxPayload): Promise<ChatwootApiChannelSummary> {
+    const path = `/api/v1/accounts/${accountId}/inboxes/${inboxId}`;
+    const response = await this.fetcher(joinUrl(this.readConfig().baseUrl, path), {
+      method: 'PUT',
+      headers: {
+        ...buildChatwootAuthHeaders(apiAccessToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chatwoot API inbox update request failed: method=PUT path=${path} status=${response.status}`);
     }
 
     return parseInbox(await response.json());

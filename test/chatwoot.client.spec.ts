@@ -110,6 +110,27 @@ describe('DefaultChatwootClient', () => {
     });
   });
 
+  it('updates an API Channel inbox webhook URL', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ id: 101, channel_id: 201, name: 'Instagram Account 11', channel_type: 'Channel::Api', webhook_url: 'https://app.test/integrations/chatwoot/webhook' }),
+      text: async () => '',
+    });
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.updateApiInbox(1, 'token', 101, { channel: { webhook_url: 'https://app.test/integrations/chatwoot/webhook' } })).resolves.toMatchObject({
+      id: 101,
+      webhook_url: 'https://app.test/integrations/chatwoot/webhook',
+    });
+    expect(fetcher).toHaveBeenCalledWith('https://chatwoot.test/api/v1/accounts/1/inboxes/101', {
+      method: 'PUT',
+      headers: { Accept: 'application/json', api_access_token: 'token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: { webhook_url: 'https://app.test/integrations/chatwoot/webhook' } }),
+    });
+  });
+
   it('fails with a non-secret diagnostic when profile account_id is absent', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue({
       ok: true,

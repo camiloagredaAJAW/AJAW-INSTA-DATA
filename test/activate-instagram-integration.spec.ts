@@ -15,7 +15,10 @@ describe('ActivateInstagramIntegrationService', () => {
       agent: { id: 7, chatwootApiKey: 'agent-secret' },
       instagramAccounts: [{ id: 11, version: 1, chatwootAccountId: 42, chatwootInboxId: 100, chatwootChannelId: 200 }],
     });
-    const chatwoot = chatwootMock({ accountId: 42 });
+    const chatwoot = chatwootMock({
+      accountId: 42,
+      inboxes: [{ id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', webhook_url: 'https://app.test/integrations/chatwoot/webhook' }],
+    });
     const service = createService(axelor, chatwoot);
 
     await expect(service.execute({ agentId: 7 })).resolves.toEqual({
@@ -30,9 +33,84 @@ describe('ActivateInstagramIntegrationService', () => {
     expect(axelor.login).toHaveBeenCalledTimes(1);
     expect(axelor.login.mock.invocationCallOrder[0]).toBeLessThan(axelor.fetchAgent.mock.invocationCallOrder[0]);
     expect(chatwoot.getProfile).not.toHaveBeenCalled();
-    expect(chatwoot.listInboxes).not.toHaveBeenCalled();
+    expect(chatwoot.listInboxes).toHaveBeenCalledWith(42, 'agent-secret');
     expect(chatwoot.createApiInbox).not.toHaveBeenCalled();
+    expect(chatwoot.updateApiInbox).not.toHaveBeenCalled();
     expect(axelor.updateInstagramAccount).not.toHaveBeenCalled();
+  });
+
+  it('repairs an existing linked API inbox when its outbound webhook URL is missing', async () => {
+    const axelor = axelorMock({
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+      instagramAccounts: [{ id: 11, version: 1, chatwootAccountId: 42, chatwootInboxId: 100, chatwootChannelId: 200 }],
+    });
+    const chatwoot = chatwootMock({
+      accountId: 42,
+      inboxes: [{ id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' }],
+      updatedInbox: { id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', webhook_url: 'https://app.test/integrations/chatwoot/webhook' },
+    });
+    const service = createService(axelor, chatwoot);
+
+    await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
+      status: IntegrationStatus.Active,
+      chatwootAccountId: 42,
+      chatwootInboxId: 100,
+      chatwootChannelId: 200,
+    });
+
+    expect(chatwoot.updateApiInbox).toHaveBeenCalledWith(42, 'agent-secret', 100, { channel: { webhook_url: 'https://app.test/integrations/chatwoot/webhook' } });
+    expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(
+      11,
+      1,
+      expect.objectContaining({
+        chatwootWebhookUrl: 'https://app.test/integrations/chatwoot/webhook',
+        chatwootIntegrationStatus: IntegrationStatus.Active,
+      }),
+    );
+  });
+
+  it('keeps existing linkage active when best-effort webhook repair cannot reach Chatwoot', async () => {
+    const axelor = axelorMock({
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+      instagramAccounts: [{ id: 11, version: 1, chatwootAccountId: 42, chatwootInboxId: 100, chatwootChannelId: 200 }],
+    });
+    const chatwoot = chatwootMock({ accountId: 42 });
+    chatwoot.listInboxes.mockRejectedValueOnce(new Error('Chatwoot unavailable'));
+    const service = createService(axelor, chatwoot);
+
+    await expect(service.execute({ agentId: 7 })).resolves.toEqual({
+      status: IntegrationStatus.Active,
+      agentId: 7,
+      instagramAccountId: 11,
+      chatwootAccountId: 42,
+      chatwootInboxId: 100,
+      chatwootChannelId: 200,
+    });
+
+    expect(chatwoot.updateApiInbox).not.toHaveBeenCalled();
+    expect(axelor.updateInstagramAccount).not.toHaveBeenCalled();
+  });
+
+  it('keeps existing linkage active when repaired webhook metadata cannot be persisted', async () => {
+    const axelor = axelorMock({
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+      instagramAccounts: [{ id: 11, version: 1, chatwootAccountId: 42, chatwootInboxId: 100, chatwootChannelId: 200 }],
+    });
+    axelor.updateInstagramAccount.mockRejectedValueOnce(new Error('Axelor unavailable'));
+    const chatwoot = chatwootMock({
+      accountId: 42,
+      inboxes: [{ id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' }],
+      updatedInbox: { id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api', webhook_url: 'https://app.test/integrations/chatwoot/webhook' },
+    });
+    const service = createService(axelor, chatwoot);
+
+    await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
+      status: IntegrationStatus.Active,
+      chatwootInboxId: 100,
+      chatwootChannelId: 200,
+    });
+
+    expect(chatwoot.updateApiInbox).toHaveBeenCalledWith(42, 'agent-secret', 100, { channel: { webhook_url: 'https://app.test/integrations/chatwoot/webhook' } });
   });
 
   it('uses stored chatwootAccountId for provisioning and Chatwoot profile for inbox naming', async () => {
@@ -240,7 +318,7 @@ describe('ActivateInstagramIntegrationService', () => {
         chatwootChannelId: 201,
         chatwootChannelType: 'Channel::Api',
         chatwootInboxName: 'Chatwoot Account IG 2',
-        chatwootWebhookUrl: 'https://hooks.test/101',
+        chatwootWebhookUrl: 'https://app.test/integrations/chatwoot/webhook',
         chatwootIntegrationStatus: IntegrationStatus.Active,
         chatwootLastIntegrationError: null,
       }),
@@ -302,7 +380,7 @@ describe('ActivateInstagramIntegrationService', () => {
         chatwootChannelType: 'Channel::Api',
         chatwootInboxName: 'Chatwoot Account IG',
         chatwootInboxIdentifier: 'inbox-101',
-        chatwootWebhookUrl: 'https://hooks.test/101',
+        chatwootWebhookUrl: 'https://app.test/integrations/chatwoot/webhook',
         chatwootHmacToken: 'webhook-secret',
         chatwootIntegrationStatus: IntegrationStatus.Active,
         chatwootLastIntegrationError: null,
@@ -523,6 +601,7 @@ function axelorMock(options: AxelorMockOptions = {}) {
 
 function chatwootMock(options: ChatwootMockOptions = {}) {
   const accountId = options.accountId ?? 1;
+  const fallbackInbox = options.createdInbox ?? { id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' };
 
   return {
     getProfile: jest.fn().mockResolvedValue({
@@ -530,7 +609,10 @@ function chatwootMock(options: ChatwootMockOptions = {}) {
       accounts: options.accounts ?? [{ id: accountId, name: 'Chatwoot Account' }],
     }),
     listInboxes: jest.fn().mockResolvedValue(options.inboxes ?? []),
-    createApiInbox: jest.fn().mockResolvedValue(options.createdInbox ?? { id: 100, channel_id: 200, name: 'Chatwoot Account IG', channel_type: 'Channel::Api' }),
+    createApiInbox: jest.fn().mockResolvedValue(fallbackInbox),
+    updateApiInbox: jest.fn().mockImplementation((_accountId: number, _apiAccessToken: string, inboxId: number, payload: { channel: { webhook_url: string } }) => Promise.resolve(
+      options.updatedInbox ?? { ...fallbackInbox, id: inboxId, webhook_url: payload.channel.webhook_url },
+    )),
   } as unknown as jest.Mocked<DefaultChatwootClient>;
 }
 
@@ -574,6 +656,7 @@ interface ChatwootMockOptions {
   accounts?: Array<{ id: number; name?: string }>;
   inboxes?: Array<Record<string, unknown>>;
   createdInbox?: Record<string, unknown>;
+  updatedInbox?: Record<string, unknown>;
 }
 
 function configService(): ConfigService<EnvironmentConfig, true> {

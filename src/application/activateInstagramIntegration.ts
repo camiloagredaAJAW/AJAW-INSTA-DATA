@@ -46,13 +46,19 @@ export class ActivateInstagramIntegrationService {
 
     const existingLinkage = existingChatwootLinkage(instagramAccount);
     if (existingLinkage) {
+      const repairedInbox = await this.repairLinkedApiInboxWebhookUrl(agent.chatwootApiKey, existingLinkage);
+      const instagramAccountVersion = typeof instagramAccount.version === 'number' ? instagramAccount.version : undefined;
+      if (repairedInbox && instagramAccountVersion !== undefined) {
+        await persistLinkedInboxRepairSafely(this.axelorClient, instagramAccount.id, instagramAccountVersion, existingLinkage.chatwootAccountId, repairedInbox);
+      }
+
       return {
         status: IntegrationStatus.Active,
         agentId,
         instagramAccountId: instagramAccount.id,
         chatwootAccountId: existingLinkage.chatwootAccountId,
-        chatwootInboxId: existingLinkage.chatwootInboxId,
-        chatwootChannelId: existingLinkage.chatwootChannelId,
+        chatwootInboxId: repairedInbox?.id ?? existingLinkage.chatwootInboxId,
+        chatwootChannelId: repairedInbox?.channel_id ?? existingLinkage.chatwootChannelId,
       };
     }
 
@@ -87,7 +93,11 @@ export class ActivateInstagramIntegrationService {
       const apiInboxes = (await this.chatwootClient.listInboxes(chatwootAccountId, chatwootApiKey)).filter(isChatwootApiChannelInbox);
       const inboxName = buildAvailableApiInboxName(resolveChatwootAccountName(chatwootProfile, chatwootAccountId), apiInboxes);
       const existingInbox = apiInboxes.find((inbox) => inbox.name === inboxName);
-      const inbox = existingInbox ?? (await this.chatwootClient.createApiInbox(chatwootAccountId, chatwootApiKey, buildApiInboxPayload(inboxName, this.configService)));
+      const inbox = await this.ensureApiInboxWebhookUrl(
+        chatwootAccountId,
+        chatwootApiKey,
+        existingInbox ?? (await this.chatwootClient.createApiInbox(chatwootAccountId, chatwootApiKey, buildApiInboxPayload(inboxName, this.configService))),
+      );
 
       const updatedInstagramAccount = await this.axelorClient.updateInstagramAccount(
         instagramAccount.id,
@@ -134,6 +144,33 @@ export class ActivateInstagramIntegrationService {
     }
 
     return profileAccountId;
+  }
+
+  private async ensureApiInboxWebhookUrl(accountId: number, apiAccessToken: string, inbox: ChatwootApiChannelSummary): Promise<ChatwootApiChannelSummary> {
+    const expectedWebhookUrl = buildChatwootWebhookUrl(this.configService.get('APP_BASE_URL', { infer: true }));
+    if (!expectedWebhookUrl || !needsWebhookUrlUpdate(inbox, expectedWebhookUrl)) {
+      return inbox;
+    }
+
+    return this.chatwootClient.updateApiInbox(accountId, apiAccessToken, inbox.id, { channel: { webhook_url: expectedWebhookUrl } });
+  }
+
+  private async repairLinkedApiInboxWebhookUrl(apiAccessToken: string | undefined, linkage: ExistingChatwootLinkage): Promise<ChatwootApiChannelSummary | null> {
+    if (!apiAccessToken) {
+      return null;
+    }
+
+    try {
+      const linkedInbox = (await this.chatwootClient.listInboxes(linkage.chatwootAccountId, apiAccessToken))
+        .find((inbox) => inbox.id === linkage.chatwootInboxId && isChatwootApiChannelInbox(inbox));
+
+      const expectedWebhookUrl = buildChatwootWebhookUrl(this.configService.get('APP_BASE_URL', { infer: true }));
+      return linkedInbox && expectedWebhookUrl && needsWebhookUrlUpdate(linkedInbox, expectedWebhookUrl)
+        ? this.chatwootClient.updateApiInbox(linkage.chatwootAccountId, apiAccessToken, linkedInbox.id, { channel: { webhook_url: expectedWebhookUrl } })
+        : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -275,6 +312,10 @@ function buildChatwootWebhookUrl(appBaseUrl: string | undefined): string | undef
   return normalizedBaseUrl ? `${normalizedBaseUrl}/integrations/chatwoot/webhook` : undefined;
 }
 
+function needsWebhookUrlUpdate(inbox: ChatwootApiChannelSummary, expectedWebhookUrl: string): boolean {
+  return inbox.webhook_url !== expectedWebhookUrl && inbox.callback_webhook_url !== expectedWebhookUrl;
+}
+
 function buildFailedLinkageUpdate(reason: string): Record<string, unknown> {
   return {
     chatwootIntegrationStatus: IntegrationStatus.Failed,
@@ -291,13 +332,21 @@ async function persistFailureSafely(axelorClient: DefaultAxelorClient, id: strin
   }
 }
 
+async function persistLinkedInboxRepairSafely(axelorClient: DefaultAxelorClient, id: string | number, version: number, accountId: number, inbox: ChatwootApiChannelSummary): Promise<void> {
+  try {
+    await axelorClient.updateInstagramAccount(id, version, buildSuccessfulLinkageUpdate(accountId, inbox));
+  } catch {
+    // Existing linkages should remain active even if the best-effort webhook repair cannot update local metadata.
+  }
+}
+
 function redactFailureReason(error: unknown, knownSecrets: string[]): string {
   const message = error instanceof Error ? error.message : String(error);
   return knownSecrets.filter(Boolean).reduce((text, secret) => text.split(secret).join('[REDACTED]'), redactText(message));
 }
 
 interface ExistingChatwootLinkage {
-  chatwootAccountId: string | number;
-  chatwootInboxId: string | number;
-  chatwootChannelId?: string | number;
+  chatwootAccountId: number;
+  chatwootInboxId: number;
+  chatwootChannelId?: number;
 }
