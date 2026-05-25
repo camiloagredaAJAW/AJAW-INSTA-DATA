@@ -179,6 +179,20 @@ describe('InstagramOutboundMessagesService', () => {
       reason: 'not_outbound_instagram_reply',
     });
   });
+
+  it('classifies Instagram messaging window policy failures', async () => {
+    const axelorClient = axelorMock({ instagramUserId: '17841410077817456', accessToken: 'instagram-token', chatwootHmacToken: 'webhook-secret' });
+    const instagramOAuthClient = oauthMock();
+    instagramOAuthClient.sendTextMessage.mockRejectedValueOnce(
+      new Error('Instagram send message failed: status 403 {"error":{"message":"This message is sent outside of allowed window.","type":"IGApiException","code":10,"error_subcode":2534022}}'),
+    );
+    const service = new InstagramOutboundMessagesService(axelorClient, chatwootMock(), instagramOAuthClient);
+
+    await expect(service.handleChatwootMessageCreated(chatwootOutgoingPayload())).resolves.toEqual({
+      status: 'failed',
+      reason: 'instagram_messaging_window_closed',
+    });
+  });
 });
 
 function chatwootOutgoingPayload() {

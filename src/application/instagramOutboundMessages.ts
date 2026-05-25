@@ -112,8 +112,9 @@ export class InstagramOutboundMessagesService {
       return { status: 'sent', messageId: result.messageId };
     } catch (error) {
       const safeReason = redactText(error instanceof Error ? error.message : String(error));
+      const classifiedReason = classifyInstagramOutboundFailure(safeReason);
       this.logger.error(`Chatwoot outbound message failed: chatwootMessageId=${parsed.chatwootMessageId ?? 'unknown'} reason=${safeReason}`);
-      return { status: 'failed', reason: safeReason };
+      return { status: 'failed', reason: classifiedReason ?? safeReason };
     }
   }
 
@@ -201,6 +202,12 @@ export class InstagramOutboundMessagesService {
 
 function buildOutboundFingerprint(recipientId: string, content: string): string {
   return `${recipientId}\n${content.trim()}`;
+}
+
+function classifyInstagramOutboundFailure(reason: string): string | undefined {
+  return reason.includes('error_subcode":2534022') || reason.includes('outside of allowed window')
+    ? 'instagram_messaging_window_closed'
+    : undefined;
 }
 
 function isValidChatwootSignature(secret: string, timestamp: string, providedHex: string, rawBody: Buffer): boolean {
