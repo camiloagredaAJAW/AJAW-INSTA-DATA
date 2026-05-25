@@ -160,12 +160,10 @@ export class InstagramWebhookRoutingService {
     event: NormalizedInstagramWebhookEvent,
     conversationSourceId: string,
   ) {
-    if (event.kind === 'dm') {
-      const conversations = await this.chatwootClient.listContactConversations(chatwootAccountId, apiKey, contactId);
-      const existingConversation = conversations.find((conversation) => isReusableDmConversation(conversation, chatwootInboxId, conversationSourceId, event));
-      if (existingConversation) {
-        return existingConversation;
-      }
+    const conversations = await this.chatwootClient.listContactConversations(chatwootAccountId, apiKey, contactId);
+    const existingConversation = conversations.find((conversation) => isReusableInstagramConversation(conversation, chatwootInboxId, conversationSourceId, event));
+    if (existingConversation) {
+      return existingConversation;
     }
 
     return this.chatwootClient.createConversation(chatwootAccountId, apiKey, {
@@ -247,7 +245,7 @@ function uniqueValues(values: string[]): string[] {
   return [...new Set(values)].sort();
 }
 
-function isReusableDmConversation(
+function isReusableInstagramConversation(
   conversation: { inbox_id?: number; status?: string; source_id?: string; contact_inbox?: { source_id?: string }; custom_attributes?: Record<string, unknown> },
   chatwootInboxId: number,
   conversationSourceId: string,
@@ -261,8 +259,7 @@ function isReusableDmConversation(
     return true;
   }
 
-  return conversation.custom_attributes?.instagram_event_kind === 'dm' &&
-    conversation.custom_attributes.instagram_account_id === event.instagramAccountId &&
+  return conversation.custom_attributes?.instagram_account_id === event.instagramAccountId &&
     conversation.custom_attributes.instagram_sender_id === event.senderId;
 }
 
@@ -282,8 +279,8 @@ export function buildContactInboxSourceId(instagramAccountId: string, senderId: 
   return `ig:${instagramAccountId}:user:${senderId}`;
 }
 
-export function buildConversationSourceId(event: NormalizedInstagramWebhookEvent, contactInboxSourceId: string): string {
-  return event.kind === 'comment' ? `ig:comment:${event.sourceEventId}` : contactInboxSourceId;
+export function buildConversationSourceId(_event: NormalizedInstagramWebhookEvent, contactInboxSourceId: string): string {
+  return contactInboxSourceId;
 }
 
 export function buildMessageSourceId(sourceEventId: string): string {

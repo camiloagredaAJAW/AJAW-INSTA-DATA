@@ -278,7 +278,7 @@ describe('InstagramWebhookRoutingService', () => {
     });
   });
 
-  it('routes comments as independent conversations with visible publication context and custom attributes', async () => {
+  it('routes comments into the Instagram user conversation with visible publication context and custom attributes', async () => {
     const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();
     const instagramOAuthClient = oauthMock({}, { id: 'media-1', permalink: 'https://instagram.test/p/1', caption: 'Post caption', mediaUrl: 'https://instagram.test/media.jpg' });
@@ -291,7 +291,7 @@ describe('InstagramWebhookRoutingService', () => {
       1,
       'agent-secret',
       expect.objectContaining({
-        source_id: 'ig:comment:comment-1',
+        source_id: 'ig:ig-account-1:user:sender-2',
         custom_attributes: expect.objectContaining({ instagram_publication_url: 'https://instagram.test/p/1', instagram_publication_caption: 'Post caption' }),
       }),
     );
@@ -304,6 +304,31 @@ describe('InstagramWebhookRoutingService', () => {
         source_id: 'ig:event:comment-1',
         content_attributes: expect.objectContaining({ instagram_publication_url: 'https://instagram.test/p/1', instagram_media_url: 'https://instagram.test/media.jpg' }),
       }),
+    );
+  });
+
+  it('adds comment events to an existing DM conversation for the same Instagram user and inbox', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    chatwootClient.searchContacts.mockResolvedValueOnce([
+      { id: 10, identifier: 'instagram:user:sender-2', contact_inboxes: [{ source_id: 'ig:ig-account-1:user:sender-2', inbox: { id: 100 } }] },
+    ]);
+    chatwootClient.listContactConversations.mockResolvedValueOnce([{ id: 55, inbox_id: 100, status: 'open', source_id: 'ig:ig-account-1:user:sender-2' }]);
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock({}, { id: 'media-1', permalink: 'https://instagram.test/p/1' }));
+
+    await expect(service.route({ payload: commentPayloadWithoutPermalink() })).resolves.toEqual({
+      status: 'processed',
+      processed: [{ kind: 'comment', sourceEventId: 'comment-1', conversationSourceId: 'ig:ig-account-1:user:sender-2', messageSourceId: 'ig:event:comment-1' }],
+      ignored: [],
+      failures: [],
+    });
+
+    expect(chatwootClient.createConversation).not.toHaveBeenCalled();
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(
+      1,
+      'agent-secret',
+      55,
+      expect.objectContaining({ content: 'Instagram comment on https://instagram.test/p/1\n\nNice post', source_id: 'ig:event:comment-1' }),
     );
   });
 
