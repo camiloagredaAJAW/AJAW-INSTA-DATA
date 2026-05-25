@@ -234,6 +234,36 @@ describe('DefaultChatwootClient', () => {
     expect(fetcher.mock.calls[0][0]).toBe('https://chatwoot.test/api/v1/accounts/1/contacts/10/conversations');
   });
 
+  it('parses nested Chatwoot conversation inbox and contact inbox fields', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(
+      response({
+        body: {
+          payload: [
+            {
+              id: 55,
+              status: 'open',
+              inbox: { id: 100 },
+              contact_inbox: { source_id: 'ig:account-1:user:sender-1' },
+              custom_attributes: { instagram_event_kind: 'dm', instagram_account_id: 'account-1', instagram_sender_id: 'sender-1' },
+            },
+          ],
+        },
+      }),
+    );
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.listContactConversations(1, 'token', 10)).resolves.toEqual([
+      {
+        id: 55,
+        inbox_id: 100,
+        status: 'open',
+        source_id: 'ig:account-1:user:sender-1',
+        contact_inbox: { source_id: 'ig:account-1:user:sender-1' },
+        custom_attributes: { instagram_event_kind: 'dm', instagram_account_id: 'account-1', instagram_sender_id: 'sender-1' },
+      },
+    ]);
+  });
+
   it('reports non-secret Chatwoot endpoint diagnostics for failed API requests', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue(response({ ok: false, status: 404, body: {} }));
     const client = new DefaultChatwootClient(configService(), fetcher);

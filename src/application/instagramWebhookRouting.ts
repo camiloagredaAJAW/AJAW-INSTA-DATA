@@ -162,7 +162,7 @@ export class InstagramWebhookRoutingService {
   ) {
     if (event.kind === 'dm') {
       const conversations = await this.chatwootClient.listContactConversations(chatwootAccountId, apiKey, contactId);
-      const existingConversation = conversations.find((conversation) => conversation.inbox_id === chatwootInboxId && conversation.status !== 'resolved' && conversation.source_id === conversationSourceId);
+      const existingConversation = conversations.find((conversation) => isReusableDmConversation(conversation, chatwootInboxId, conversationSourceId, event));
       if (existingConversation) {
         return existingConversation;
       }
@@ -245,6 +245,25 @@ export class InstagramWebhookRoutingService {
 
 function uniqueValues(values: string[]): string[] {
   return [...new Set(values)].sort();
+}
+
+function isReusableDmConversation(
+  conversation: { inbox_id?: number; status?: string; source_id?: string; contact_inbox?: { source_id?: string }; custom_attributes?: Record<string, unknown> },
+  chatwootInboxId: number,
+  conversationSourceId: string,
+  event: NormalizedInstagramWebhookEvent,
+): boolean {
+  if (conversation.inbox_id !== chatwootInboxId || conversation.status === 'resolved') {
+    return false;
+  }
+
+  if (conversation.source_id === conversationSourceId || conversation.contact_inbox?.source_id === conversationSourceId) {
+    return true;
+  }
+
+  return conversation.custom_attributes?.instagram_event_kind === 'dm' &&
+    conversation.custom_attributes.instagram_account_id === event.instagramAccountId &&
+    conversation.custom_attributes.instagram_sender_id === event.senderId;
 }
 
 export function normalizeInstagramWebhookPayload(payload: unknown): NormalizedInstagramWebhookEvent[] {

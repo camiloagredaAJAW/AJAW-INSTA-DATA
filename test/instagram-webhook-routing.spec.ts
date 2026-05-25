@@ -110,6 +110,40 @@ describe('InstagramWebhookRoutingService', () => {
     expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 55, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
   });
 
+  it('reuses existing DM conversations when Chatwoot only exposes the deterministic source through contact_inbox', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    chatwootClient.searchContacts.mockResolvedValueOnce([
+      { id: 10, identifier: 'instagram:user:sender-1', name: 'Peter Chang', contact_inboxes: [{ source_id: 'ig:ig-account-1:user:sender-1', inbox: { id: 100 } }] },
+    ]);
+    chatwootClient.listContactConversations.mockResolvedValueOnce([
+      { id: 55, inbox_id: 100, status: 'open', contact_inbox: { source_id: 'ig:ig-account-1:user:sender-1' } },
+    ]);
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock());
+
+    await expect(service.route({ payload: dmPayload() })).resolves.toMatchObject({ status: 'processed', failures: [] });
+
+    expect(chatwootClient.createConversation).not.toHaveBeenCalled();
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 55, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
+  });
+
+  it('reuses existing DM conversations by Instagram custom attributes when Chatwoot omits source_id', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    chatwootClient.searchContacts.mockResolvedValueOnce([
+      { id: 10, identifier: 'instagram:user:sender-1', name: 'Peter Chang', contact_inboxes: [{ source_id: 'ig:ig-account-1:user:sender-1', inbox: { id: 100 } }] },
+    ]);
+    chatwootClient.listContactConversations.mockResolvedValueOnce([
+      { id: 55, inbox_id: 100, status: 'open', custom_attributes: { instagram_event_kind: 'dm', instagram_account_id: 'ig-account-1', instagram_sender_id: 'sender-1' } },
+    ]);
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock());
+
+    await expect(service.route({ payload: dmPayload() })).resolves.toMatchObject({ status: 'processed', failures: [] });
+
+    expect(chatwootClient.createConversation).not.toHaveBeenCalled();
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 55, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
+  });
+
   it('does not reuse Chatwoot UUID contact inbox source ids as Instagram DM conversation source ids', async () => {
     const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();

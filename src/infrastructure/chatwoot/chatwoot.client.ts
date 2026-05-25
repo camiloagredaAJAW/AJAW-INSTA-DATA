@@ -64,6 +64,9 @@ export interface ChatwootConversationSummary {
   id: number;
   source_id?: string;
   inbox_id?: number;
+  contact_inbox?: {
+    source_id?: string;
+  };
   status?: string;
   custom_attributes?: Record<string, unknown>;
   messages?: ChatwootMessageSummary[];
@@ -496,8 +499,9 @@ function parseConversation(body: unknown): ChatwootConversationSummary {
 
   return {
     id: body.id,
-    source_id: optionalString(body.source_id),
-    inbox_id: optionalNumber(body.inbox_id),
+    source_id: conversationSourceId(body),
+    inbox_id: conversationInboxId(body),
+    contact_inbox: conversationContactInbox(body),
     status: optionalString(body.status),
     custom_attributes: isRecord(body.custom_attributes) ? body.custom_attributes : undefined,
     messages: parseMessageList(body.messages),
@@ -512,10 +516,28 @@ function parseConversationSummary(body: unknown): ChatwootConversationSummary | 
 
   return {
     id: record.id,
-    source_id: optionalString(record.source_id),
-    inbox_id: optionalNumber(record.inbox_id),
+    source_id: conversationSourceId(record),
+    inbox_id: conversationInboxId(record),
+    contact_inbox: conversationContactInbox(record),
     status: optionalString(record.status),
+    custom_attributes: isRecord(record.custom_attributes) ? record.custom_attributes : undefined,
   };
+}
+
+function conversationSourceId(record: Record<string, unknown>): string | undefined {
+  return optionalString(record.source_id) ?? conversationContactInbox(record)?.source_id;
+}
+
+function conversationInboxId(record: Record<string, unknown>): number | undefined {
+  return optionalNumber(record.inbox_id) ?? (isRecord(record.inbox) ? optionalNumber(record.inbox.id) : undefined);
+}
+
+function conversationContactInbox(record: Record<string, unknown>): { source_id?: string } | undefined {
+  if (!isRecord(record.contact_inbox)) {
+    return undefined;
+  }
+
+  return { source_id: optionalString(record.contact_inbox.source_id) };
 }
 
 function parseContactInboxLinks(value: unknown): ChatwootContactInboxLink[] | undefined {
