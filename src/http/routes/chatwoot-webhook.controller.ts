@@ -21,6 +21,7 @@ export class ChatwootWebhookController {
     @Body() body: ChatwootMessageCreatedPayload,
   ): Promise<OutboundMessageResult> {
     if (!this.outboundMessages.isRelevantOutboundWebhook(body)) {
+      this.logger.log(`Ignored Chatwoot webhook POST: ${describeChatwootWebhook(body)}`);
       return { status: 'ignored', reason: 'not_outbound_instagram_reply' };
     }
 
@@ -42,4 +43,30 @@ export class ChatwootWebhookController {
 
     return this.outboundMessages.handleChatwootMessageCreated(body);
   }
+}
+
+function describeChatwootWebhook(body: ChatwootMessageCreatedPayload): string {
+  return [
+    `event=${stringOrUnknown(body.event)}`,
+    `messageType=${stringOrUnknown(body.message_type)}`,
+    `private=${body.private === true}`,
+    `accountId=${stringOrUnknown(body.account?.id)}`,
+    `inboxId=${stringOrUnknown(body.inbox?.id)}`,
+    `hasContent=${typeof body.content === 'string' && body.content.trim().length > 0}`,
+    `contactIdentifierPrefix=${identifierPrefix(body.contact?.identifier)}`,
+    `conversationSenderIdentifierPrefix=${identifierPrefix(body.conversation?.meta?.sender?.identifier)}`,
+    `contactInboxSourcePrefix=${sourcePrefix(body.conversation?.contact_inbox?.source_id)}`,
+  ].join(' ');
+}
+
+function stringOrUnknown(value: unknown): string {
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : 'unknown';
+}
+
+function identifierPrefix(value: unknown): string {
+  return typeof value === 'string' && value.includes(':') ? value.split(':').slice(0, 2).join(':') : stringOrUnknown(value ? 'present' : undefined);
+}
+
+function sourcePrefix(value: unknown): string {
+  return typeof value === 'string' && value.includes(':') ? value.split(':').slice(0, 2).join(':') : stringOrUnknown(value ? 'present' : undefined);
 }
