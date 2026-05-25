@@ -126,6 +126,11 @@ describe('InstagramWebhookRoutingService', () => {
       failures: [],
     });
 
+    expect(chatwootClient.createContactInbox).toHaveBeenCalledWith(
+      1,
+      'agent-secret',
+      expect.objectContaining({ contact_id: 10, inbox_id: 100, source_id: 'ig:ig-account-1:user:sender-1' }),
+    );
     expect(chatwootClient.createConversation).toHaveBeenCalledWith(
       1,
       'agent-secret',

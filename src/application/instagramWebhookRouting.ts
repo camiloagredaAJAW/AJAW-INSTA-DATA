@@ -117,7 +117,7 @@ export class InstagramWebhookRoutingService {
     const senderProfile = enrichedEvent.kind === 'dm' ? await this.fetchSenderProfile(enrichedEvent, account) : {};
 
     const contact = await this.findOrCreateContact(chatwootAccountId, apiKey, chatwootInboxId, contactSourceId, enrichedEvent, senderProfile);
-    const existingContactInbox = contact.contact_inboxes?.find((link) => link.inbox?.id === chatwootInboxId);
+    const existingContactInbox = contact.contact_inboxes?.find((link) => link.inbox?.id === chatwootInboxId && link.source_id === contactInboxSourceId);
     const contactInbox = existingContactInbox
       ? { id: existingContactInbox.id, source_id: existingContactInbox.source_id }
       : await this.chatwootClient.createContactInbox(chatwootAccountId, apiKey, {
