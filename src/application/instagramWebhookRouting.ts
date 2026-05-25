@@ -117,15 +117,15 @@ export class InstagramWebhookRoutingService {
     const senderProfile = enrichedEvent.kind === 'dm' ? await this.fetchSenderProfile(enrichedEvent, account) : {};
 
     const contact = await this.findOrCreateContact(chatwootAccountId, apiKey, chatwootInboxId, contactSourceId, enrichedEvent, senderProfile);
-    const existingContactInboxSourceId = contact.contact_inboxes?.find((link) => link.inbox?.id === chatwootInboxId)?.source_id;
-    const contactInbox = existingContactInboxSourceId
-      ? { id: undefined, source_id: existingContactInboxSourceId }
+    const existingContactInbox = contact.contact_inboxes?.find((link) => link.inbox?.id === chatwootInboxId);
+    const contactInbox = existingContactInbox
+      ? { id: existingContactInbox.id, source_id: existingContactInbox.source_id }
       : await this.chatwootClient.createContactInbox(chatwootAccountId, apiKey, {
           contact_id: contact.id,
           inbox_id: chatwootInboxId,
           source_id: contactInboxSourceId,
         });
-    const conversationSourceId = buildConversationSourceId(enrichedEvent, contactInbox.source_id ?? contactInboxSourceId);
+    const conversationSourceId = buildConversationSourceId(enrichedEvent, contactInboxSourceId);
     const conversation = await this.findOrCreateConversation(chatwootAccountId, apiKey, chatwootInboxId, contact.id, contactInbox.id, enrichedEvent, conversationSourceId);
     await this.chatwootClient.createIncomingMessage(chatwootAccountId, apiKey, conversation.id, {
       content: buildVisibleMessageContent(enrichedEvent),
@@ -162,7 +162,7 @@ export class InstagramWebhookRoutingService {
   ) {
     if (event.kind === 'dm') {
       const conversations = await this.chatwootClient.listContactConversations(chatwootAccountId, apiKey, contactId);
-      const existingConversation = conversations.find((conversation) => conversation.inbox_id === chatwootInboxId && conversation.status !== 'resolved');
+      const existingConversation = conversations.find((conversation) => conversation.inbox_id === chatwootInboxId && conversation.status !== 'resolved' && conversation.source_id === conversationSourceId);
       if (existingConversation) {
         return existingConversation;
       }

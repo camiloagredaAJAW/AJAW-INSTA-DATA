@@ -110,6 +110,30 @@ describe('InstagramWebhookRoutingService', () => {
     expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 55, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
   });
 
+  it('does not reuse Chatwoot UUID contact inbox source ids as Instagram DM conversation source ids', async () => {
+    const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
+    const chatwootClient = chatwootMock();
+    chatwootClient.searchContacts.mockResolvedValueOnce([
+      { id: 10, identifier: 'instagram:user:sender-1', contact_inboxes: [{ id: 20, source_id: '5ea4156f-83f0-4a81-bc1b-7a0271a63e2c', inbox: { id: 100 } }] },
+    ]);
+    chatwootClient.listContactConversations.mockResolvedValueOnce([{ id: 55, inbox_id: 100, status: 'open', source_id: '5ea4156f-83f0-4a81-bc1b-7a0271a63e2c' }]);
+    const service = new InstagramWebhookRoutingService(axelorClient, chatwootClient, oauthMock());
+
+    await expect(service.route({ payload: dmPayload() })).resolves.toEqual({
+      status: 'processed',
+      processed: [{ kind: 'dm', sourceEventId: 'mid-1', conversationSourceId: 'ig:ig-account-1:user:sender-1', messageSourceId: 'ig:event:mid-1' }],
+      ignored: [],
+      failures: [],
+    });
+
+    expect(chatwootClient.createConversation).toHaveBeenCalledWith(
+      1,
+      'agent-secret',
+      expect.objectContaining({ source_id: 'ig:ig-account-1:user:sender-1', contact_inbox_id: 20 }),
+    );
+    expect(chatwootClient.createIncomingMessage).toHaveBeenCalledWith(1, 'agent-secret', 30, expect.objectContaining({ source_id: 'ig:event:mid-1' }));
+  });
+
   it('routes Instagram echo messages as outgoing messages for the recipient contact', async () => {
     const axelorClient = axelorMock({ id: 11, chatwootAccountId: 1, chatwootInboxId: 100, accessToken: 'instagram-token', agent: { id: 7, chatwootApiKey: 'agent-secret' } });
     const chatwootClient = chatwootMock();

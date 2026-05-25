@@ -44,6 +44,7 @@ export interface ChatwootContactSummary {
 }
 
 export interface ChatwootContactInboxLink {
+  id?: number;
   source_id?: string;
   inbox?: { id?: number };
 }
@@ -504,7 +505,7 @@ function parseContactInboxLinks(value: unknown): ChatwootContactInboxLink[] | un
     }
 
     const inbox = isRecord(item.inbox) ? { id: optionalNumber(item.inbox.id) } : undefined;
-    return [{ source_id: optionalString(item.source_id), inbox }];
+    return [{ id: optionalNumber(item.id), source_id: optionalString(item.source_id), inbox }];
   });
 }
 
