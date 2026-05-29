@@ -14,6 +14,7 @@ export interface AxelorAgentRecord {
   id: string | number;
   version?: number;
   chatwootApiKey?: string;
+  processed?: boolean;
 }
 
 export interface AxelorInstagramAccountRecord {
@@ -186,6 +187,30 @@ export class DefaultAxelorClient {
     return parseAxelorData<AxelorAgentRecord>(await response.json());
   }
 
+  async updateAgentProcessed(agentId: string | number, version: number, processed: boolean): Promise<AxelorAgentRecord> {
+    const config = this.readConfig();
+    const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.agentModelName)}/${agentId}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...this.buildAuthenticatedRestHeaders(config),
+      },
+      body: JSON.stringify({ data: buildAgentProcessedUpdate(version, processed) }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Axelor Agent processed update failed with status ${response.status}`);
+    }
+
+    const updated = parseAxelorData<AxelorAgentRecord>(await response.json());
+    if (!updated) {
+      throw new Error('Axelor Agent processed update returned no data');
+    }
+
+    return updated;
+  }
+
   async searchInstagramAccountsByAgent(agentId: string | number, options: AxelorSearchOptions = {}): Promise<AxelorInstagramAccountRecord[]> {
     const config = this.readConfig();
     const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/search`, {
@@ -288,8 +313,8 @@ export class DefaultAxelorClient {
 
   async updateInstagramAccount(id: string | number, version: number, data: Record<string, unknown>): Promise<AxelorInstagramAccountRecord> {
     const config = this.readConfig();
-    const response = await this.fetcher(modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName), {
-      method: 'PUT',
+    const response = await this.fetcher(`${modelEndpoint(config.baseUrl, config.namespace, config.instagramAccountModelName)}/${id}`, {
+      method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -457,6 +482,13 @@ export function buildInstagramAccountSearchByStatePayload(instagramState: string
       _domain: 'self.instagramState=:instagramState',
       _domainContext: { instagramState },
     },
+  };
+}
+
+export function buildAgentProcessedUpdate(version: number, processed: boolean): Record<string, unknown> {
+  return {
+    version,
+    processed,
   };
 }
 

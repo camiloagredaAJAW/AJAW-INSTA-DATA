@@ -80,6 +80,8 @@ describe('InstagramBusinessLoginService', () => {
         connectedAt: expect.any(String),
       }),
     );
+    expect(axelor.fetchAgent).toHaveBeenCalledWith(7);
+    expect(axelor.updateAgentProcessed).toHaveBeenCalledWith(7, 25, true);
     expect(oauth.fetchProfile).toHaveBeenCalledWith('short-token-secret');
   });
 
@@ -123,6 +125,18 @@ describe('InstagramBusinessLoginService', () => {
     expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(11, 4, expect.objectContaining({ accessToken: 'short-token-secret' }));
   });
 
+  it('marks the linked Agent as not processed when the callback cannot connect Instagram', async () => {
+    const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123', agent: { id: 7 } } });
+    const oauth = oauthMock({ profileError: new Error('Meta profile lookup failed') });
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauth);
+
+    await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).rejects.toThrow('Meta profile lookup failed');
+
+    expect(axelor.updateInstagramAccount).not.toHaveBeenCalled();
+    expect(axelor.fetchAgent).toHaveBeenCalledWith(7);
+    expect(axelor.updateAgentProcessed).toHaveBeenCalledWith(7, 25, false);
+  });
+
   it('rejects invalid or replayed state before token exchange or account update', async () => {
     const axelor = axelorMock({ stateAccount: null });
     const oauth = oauthMock();
@@ -137,20 +151,33 @@ describe('InstagramBusinessLoginService', () => {
 function axelorMock(options: AxelorMockOptions = {}) {
   return {
     login: jest.fn().mockResolvedValue({ jsessionId: 'session-id' }),
-    fetchAgent: jest.fn().mockResolvedValue(Object.prototype.hasOwnProperty.call(options, 'agent') ? options.agent : { id: 7 }),
+    fetchAgent: jest.fn().mockResolvedValue(Object.prototype.hasOwnProperty.call(options, 'agent') ? options.agent : { id: 7, version: 25 }),
     searchInstagramAccountsByAgent: jest.fn().mockResolvedValue(options.instagramAccounts ?? []),
     updateInstagramAccountOAuthState: jest.fn().mockImplementation((id: string | number, version: number, instagramState: string) => Promise.resolve({ id, version: version + 1, instagramState })),
     createInstagramAccount: jest.fn().mockImplementation((_agentId: string | number, instagramState: string) => Promise.resolve({ id: 99, version: 1, instagramState, active: false })),
-    findInstagramAccountByState: jest.fn().mockResolvedValue(Object.prototype.hasOwnProperty.call(options, 'stateAccount') ? options.stateAccount : { id: 11, version: 4, instagramState: 'state-123' }),
+    findInstagramAccountByState: jest.fn().mockResolvedValue(
+      Object.prototype.hasOwnProperty.call(options, 'stateAccount') ? normalizeStateAccount(options.stateAccount) : { id: 11, version: 4, instagramState: 'state-123', agent: { id: 7 } },
+    ),
     updateInstagramAccount: jest.fn().mockImplementation((id: string | number, version: number, data: Record<string, unknown>) => Promise.resolve({ id, version: version + 1, ...data })),
+    updateAgentProcessed: jest.fn().mockImplementation((id: string | number, version: number, processed: boolean) => Promise.resolve({ id, version: version + 1, processed })),
   } as unknown as jest.Mocked<DefaultAxelorClient>;
+}
+
+function normalizeStateAccount(stateAccount: Record<string, unknown> | null | undefined): Record<string, unknown> | null | undefined {
+  if (!stateAccount) {
+    return stateAccount;
+  }
+
+  return stateAccount.agent ? stateAccount : { ...stateAccount, agent: { id: 7 } };
 }
 
 function oauthMock(options: OAuthMockOptions = {}) {
   return {
     exchangeCodeForShortLivedToken: jest.fn().mockResolvedValue(options.shortLived ?? { accessToken: 'short-token-secret', userId: '17841400000000000' }),
     tryExchangeLongLivedToken: jest.fn().mockResolvedValue(options.longLived ?? { ok: true, token: { accessToken: 'long-token-secret', expiresIn: 5_184_000 } }),
-    fetchProfile: jest.fn().mockResolvedValue(options.profile ?? { userId: '17841400000000000', username: 'test_user', name: 'Test User' }),
+    fetchProfile: options.profileError
+      ? jest.fn().mockRejectedValue(options.profileError)
+      : jest.fn().mockResolvedValue(options.profile ?? { userId: '17841400000000000', username: 'test_user', name: 'Test User' }),
   } as unknown as jest.Mocked<InstagramOAuthClient>;
 }
 
@@ -177,4 +204,5 @@ interface OAuthMockOptions {
   shortLived?: { accessToken: string; userId: string };
   longLived?: { ok: true; token: { accessToken: string; expiresIn?: number } } | { ok: false; error: { status?: number; message: string } };
   profile?: { userId: string; username?: string; name?: string };
+  profileError?: Error;
 }

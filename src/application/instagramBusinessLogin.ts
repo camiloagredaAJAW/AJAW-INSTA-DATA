@@ -74,37 +74,44 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
       throw new InstagramBusinessLoginError('InstagramAccount version is required to complete OAuth callback');
     }
 
-    const redirectUri = this.getRedirectUri();
-    const shortLivedToken = await this.instagramOAuthClient.exchangeCodeForShortLivedToken({ code, redirectUri });
-    const longLivedTokenExchange = await this.tryLongLivedExchange(shortLivedToken.accessToken);
-    const connectedAt = new Date().toISOString();
-    const longLivedToken = longLivedTokenExchange.result?.ok ? longLivedTokenExchange.result.token : null;
-    const accessToken = longLivedToken?.accessToken ?? shortLivedToken.accessToken;
-    const tokenExpiresAt = longLivedToken?.expiresIn ? new Date(Date.now() + longLivedToken.expiresIn * 1000).toISOString() : undefined;
-    const profile = await this.instagramOAuthClient.fetchProfile(accessToken);
+    try {
+      const redirectUri = this.getRedirectUri();
+      const shortLivedToken = await this.instagramOAuthClient.exchangeCodeForShortLivedToken({ code, redirectUri });
+      const longLivedTokenExchange = await this.tryLongLivedExchange(shortLivedToken.accessToken);
+      const connectedAt = new Date().toISOString();
+      const longLivedToken = longLivedTokenExchange.result?.ok ? longLivedTokenExchange.result.token : null;
+      const accessToken = longLivedToken?.accessToken ?? shortLivedToken.accessToken;
+      const tokenExpiresAt = longLivedToken?.expiresIn ? new Date(Date.now() + longLivedToken.expiresIn * 1000).toISOString() : undefined;
+      const profile = await this.instagramOAuthClient.fetchProfile(accessToken);
 
-    await this.axelorClient.updateInstagramAccount(
-      instagramAccount.id,
-      instagramAccount.version,
-      buildInstagramAccountConnectedUpdate({
+      await this.axelorClient.updateInstagramAccount(
+        instagramAccount.id,
+        instagramAccount.version,
+        buildInstagramAccountConnectedUpdate({
+          instagramUserId: profile.userId,
+          accessToken,
+          connectedAt,
+          tokenExpiresAt,
+          name: profile.name,
+          username: profile.username,
+        }),
+      );
+
+      await this.updateLinkedAgentProcessed(instagramAccount, true);
+
+      return {
+        status: 'connected',
+        instagramAccountId: instagramAccount.id,
         instagramUserId: profile.userId,
-        accessToken,
-        connectedAt,
-        tokenExpiresAt,
         name: profile.name,
         username: profile.username,
-      }),
-    );
-
-    return {
-      status: 'connected',
-      instagramAccountId: instagramAccount.id,
-      instagramUserId: profile.userId,
-      name: profile.name,
-      username: profile.username,
-      tokenSource: longLivedToken ? 'long_lived' : 'short_lived',
-      longLivedTokenExchange: longLivedTokenExchange.metadata,
-    };
+        tokenSource: longLivedToken ? 'long_lived' : 'short_lived',
+        longLivedTokenExchange: longLivedTokenExchange.metadata,
+      };
+    } catch (error) {
+      await this.updateLinkedAgentProcessed(instagramAccount, false);
+      throw error;
+    }
   }
 
   private async persistState(instagramAccount: AxelorInstagramAccountRecord, state: string): Promise<AxelorInstagramAccountRecord> {
@@ -113,6 +120,24 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
     }
 
     return this.axelorClient.updateInstagramAccountOAuthState(instagramAccount.id, instagramAccount.version, state);
+  }
+
+  private async updateLinkedAgentProcessed(instagramAccount: AxelorInstagramAccountRecord, processed: boolean): Promise<void> {
+    const agentId = instagramAccount.agent?.id;
+    if (agentId === undefined || agentId === null) {
+      throw new InstagramBusinessLoginError('InstagramAccount Agent reference is required to update Agent processed status');
+    }
+
+    const agent = await this.axelorClient.fetchAgent(agentId);
+    if (!agent) {
+      throw new InstagramBusinessLoginError('InstagramAccount Agent reference does not exist');
+    }
+
+    if (typeof agent.version !== 'number') {
+      throw new InstagramBusinessLoginError('Agent version is required to update processed status');
+    }
+
+    await this.axelorClient.updateAgentProcessed(agentId, agent.version, processed);
   }
 
   private buildAuthorizeUrl(state: string): string {
