@@ -153,6 +153,22 @@ describe('ActivateInstagramIntegrationService', () => {
     expect(chatwoot.listInboxes).toHaveBeenCalledWith(42, 'agent-secret');
   });
 
+  it('uses the first Chatwoot profile account when profile account_id is absent', async () => {
+    const axelor = axelorMock({
+      agent: { id: 7, chatwootApiKey: 'agent-secret' },
+      instagramAccounts: [publishedInstagramAccount({ id: 11, version: 3 })],
+    });
+    const chatwoot = chatwootMock({ omitAccountId: true, accounts: [{ id: 42, name: 'Chatwoot Account' }] });
+    const service = createService(axelor, chatwoot);
+
+    await expect(service.execute({ agentId: 7 })).resolves.toMatchObject({
+      status: IntegrationStatus.Active,
+      chatwootAccountId: 42,
+    });
+
+    expect(chatwoot.listInboxes).toHaveBeenCalledWith(42, 'agent-secret');
+  });
+
   it('treats zero Chatwoot linkage IDs as absent instead of reusable linkage', async () => {
     const axelor = axelorMock({
       agent: { id: 7, chatwootApiKey: 'agent-secret' },
@@ -605,7 +621,7 @@ function chatwootMock(options: ChatwootMockOptions = {}) {
 
   return {
     getProfile: jest.fn().mockResolvedValue({
-      account_id: accountId,
+      account_id: options.omitAccountId ? undefined : accountId,
       accounts: options.accounts ?? [{ id: accountId, name: 'Chatwoot Account' }],
     }),
     listInboxes: jest.fn().mockResolvedValue(options.inboxes ?? []),
@@ -653,6 +669,7 @@ interface AxelorMockOptions {
 
 interface ChatwootMockOptions {
   accountId?: number;
+  omitAccountId?: boolean;
   accounts?: Array<{ id: number; name?: string }>;
   inboxes?: Array<Record<string, unknown>>;
   createdInbox?: Record<string, unknown>;

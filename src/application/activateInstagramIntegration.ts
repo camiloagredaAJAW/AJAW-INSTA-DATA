@@ -139,11 +139,16 @@ export class ActivateInstagramIntegrationService {
     }
 
     const profileAccountId = positiveIntegerId(profile.account_id);
-    if (!profileAccountId) {
+    if (profileAccountId) {
+      return profileAccountId;
+    }
+
+    const firstProfileAccountId = profile.accounts?.map((account) => positiveIntegerId(account.id)).find(Boolean);
+    if (!firstProfileAccountId) {
       throw new Error('Chatwoot profile response has invalid account_id');
     }
 
-    return profileAccountId;
+    return firstProfileAccountId;
   }
 
   private async ensureApiInboxWebhookUrl(accountId: number, apiAccessToken: string, inbox: ChatwootApiChannelSummary): Promise<ChatwootApiChannelSummary> {

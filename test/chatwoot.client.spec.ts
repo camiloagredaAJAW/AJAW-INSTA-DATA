@@ -25,6 +25,19 @@ describe('DefaultChatwootClient', () => {
     });
   });
 
+  it('accepts Chatwoot profile responses that only expose account memberships', async () => {
+    const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ accounts: [{ id: 42, name: 'AJAW AI' }] }),
+      text: async () => '{"accounts":[{"id":42,"name":"AJAW AI"}]}',
+    });
+    const client = new DefaultChatwootClient(configService(), fetcher);
+
+    await expect(client.getProfile('chatwoot-secret')).resolves.toEqual({ account_id: undefined, accounts: [{ id: 42, name: 'AJAW AI' }] });
+  });
+
   it('lists inboxes and parses API Channel fields without requiring real Chatwoot calls', async () => {
     const fetcher = jest.fn<ReturnType<FetchLike>, Parameters<FetchLike>>().mockResolvedValue({
       ok: true,

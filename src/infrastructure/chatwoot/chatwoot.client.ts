@@ -4,7 +4,7 @@ import { EnvironmentConfig } from '../../config/environment';
 import { FetchLike } from '../axelor/axelor.client';
 
 export interface ChatwootProfile {
-  account_id: number;
+  account_id?: number;
   accounts?: ChatwootProfileAccount[];
 }
 
@@ -346,13 +346,19 @@ export function isChatwootApiChannelInbox(inbox: ChatwootApiChannelSummary): boo
 }
 
 function parseProfile(body: unknown): ChatwootProfile {
-  if (!isRecord(body) || typeof body.account_id !== 'number') {
+  if (!isRecord(body)) {
+    throw new Error('Chatwoot profile response is missing account_id');
+  }
+
+  const accountId = optionalNumber(body.account_id);
+  const accounts = parseProfileAccounts(body.accounts);
+  if (accountId === undefined && (!accounts || accounts.length === 0)) {
     throw new Error('Chatwoot profile response is missing account_id');
   }
 
   return {
-    account_id: body.account_id,
-    accounts: parseProfileAccounts(body.accounts),
+    account_id: accountId,
+    accounts,
   };
 }
 
