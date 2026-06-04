@@ -7,6 +7,7 @@ import {
   buildInstagramAccountConnectedUpdate,
   DefaultAxelorClient,
 } from '../infrastructure/axelor/axelor.client';
+import { IntegrationStatus } from '../domain/integrationStatus';
 import { InstagramOAuthClient, InstagramLongLivedTokenResult } from '../infrastructure/meta/instagram-oauth.client';
 import {
   InstagramBusinessLoginUseCase,
@@ -16,7 +17,7 @@ import {
   InstagramLoginStartResult,
   InstagramLongLivedTokenExchangeMetadata,
 } from './ports/instagram-login.port';
-import { normalizeAgentId } from './activateInstagramIntegration';
+import { ActivateInstagramIntegrationService, normalizeAgentId } from './activateInstagramIntegration';
 
 const INSTAGRAM_AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
 const INSTAGRAM_BUSINESS_SCOPES = ['instagram_business_basic', 'instagram_business_manage_messages', 'instagram_business_manage_comments'];
@@ -37,6 +38,7 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
     private readonly configService: ConfigService<EnvironmentConfig, true>,
     private readonly axelorClient: DefaultAxelorClient,
     private readonly instagramOAuthClient: InstagramOAuthClient,
+    private readonly activateInstagramIntegration: ActivateInstagramIntegrationService,
   ) {}
 
   async start(request: InstagramLoginStartRequest): Promise<InstagramLoginStartResult> {
@@ -98,8 +100,10 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
         }),
       );
 
-      const botCreatorResult = await this.requestInstagramBotCreator(instagramAccount.agent?.id);
-      const status = botCreatorResult.connected ? 'connected' : 'unconnected';
+      const agentId = this.requireLinkedAgentId(instagramAccount);
+      const activationResult = await this.activateInstagramIntegration.execute({ agentId });
+      const botCreatorResult = activationResult.status === IntegrationStatus.Active ? await this.requestInstagramBotCreator(agentId) : { connected: false };
+      const status = activationResult.status === IntegrationStatus.Active && botCreatorResult.connected ? 'connected' : 'unconnected';
 
       await this.updateLinkedAgentProcessed(instagramAccount, botCreatorResult.connected);
 
@@ -127,10 +131,7 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
   }
 
   private async updateLinkedAgentProcessed(instagramAccount: AxelorInstagramAccountRecord, processed: boolean): Promise<void> {
-    const agentId = instagramAccount.agent?.id;
-    if (agentId === undefined || agentId === null) {
-      throw new InstagramBusinessLoginError('InstagramAccount Agent reference is required to update Agent processed status');
-    }
+    const agentId = this.requireLinkedAgentId(instagramAccount);
 
     const agent = await this.axelorClient.fetchAgent(agentId);
     if (!agent) {
@@ -142,6 +143,15 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
     }
 
     await this.axelorClient.updateAgentProcessed(agentId, agent.version, processed);
+  }
+
+  private requireLinkedAgentId(instagramAccount: AxelorInstagramAccountRecord): string | number {
+    const agentId = instagramAccount.agent?.id;
+    if (agentId === undefined || agentId === null) {
+      throw new InstagramBusinessLoginError('InstagramAccount Agent reference is required to complete Instagram setup');
+    }
+
+    return agentId;
   }
 
   private async requestInstagramBotCreator(agentId: string | number | undefined): Promise<{ connected: boolean }> {

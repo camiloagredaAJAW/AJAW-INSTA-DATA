@@ -1,6 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import { InstagramBusinessLoginError, InstagramBusinessLoginService } from '../src/application/instagramBusinessLogin';
+import { ActivateInstagramIntegrationService } from '../src/application/activateInstagramIntegration';
 import { EnvironmentConfig } from '../src/config/environment';
+import { IntegrationStatus } from '../src/domain/integrationStatus';
 import { DefaultAxelorClient } from '../src/infrastructure/axelor/axelor.client';
 import { InstagramOAuthClient } from '../src/infrastructure/meta/instagram-oauth.client';
 
@@ -14,7 +16,7 @@ describe('InstagramBusinessLoginService', () => {
       agent: { id: 7 },
       instagramAccounts: [{ id: 11, version: 3 }],
     });
-    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock());
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock(), activationMock());
 
     const result = await service.start({ agentId: '7' });
     const authorizeUrl = new URL(result.authorizeUrl);
@@ -34,7 +36,7 @@ describe('InstagramBusinessLoginService', () => {
 
   it('creates an OAuth placeholder account when the Agent exists but has no InstagramAccount yet', async () => {
     const axelor = axelorMock({ agent: { id: 7 }, instagramAccounts: [] });
-    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock());
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock(), activationMock());
 
     const result = await service.start({ agentId: 7 });
 
@@ -44,7 +46,7 @@ describe('InstagramBusinessLoginService', () => {
 
   it('rejects login start when the Agent context is missing and does not persist state', async () => {
     const axelor = axelorMock({ agent: null });
-    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock());
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock(), activationMock());
 
     await expect(service.start({ agentId: 7 })).rejects.toThrow(InstagramBusinessLoginError);
     expect(axelor.searchInstagramAccountsByAgent).not.toHaveBeenCalled();
@@ -59,7 +61,8 @@ describe('InstagramBusinessLoginService', () => {
       shortLived: { accessToken: 'short-token-secret', userId: '35972463999033656' },
       profile: { userId: '17841410077817456', username: 'ajaw_ai', name: 'AJAW AI' },
     });
-    const service = new InstagramBusinessLoginService(configService(), axelor, oauth);
+    const activation = activationMock();
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauth, activation);
 
     await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toEqual({
       status: 'connected',
@@ -87,6 +90,7 @@ describe('InstagramBusinessLoginService', () => {
     );
     expect(axelor.fetchAgent).toHaveBeenCalledWith(7);
     expect(axelor.updateAgentProcessed).toHaveBeenCalledWith(7, 25, true);
+    expect(activation.execute).toHaveBeenCalledWith({ agentId: 7 });
     expect(botCreatorFetch).toHaveBeenCalledWith('https://n8n.ajaw.ai/webhook/instagram-bot-creator?agentId=7', { method: 'POST', body: '' });
     expect(oauth.fetchProfile).toHaveBeenCalledWith('short-token-secret');
   });
@@ -99,7 +103,7 @@ describe('InstagramBusinessLoginService', () => {
       longLived: { ok: true, token: { accessToken: 'long-token-secret', expiresIn: 5_184_000 } },
       profile: { userId: '17841410077817456', username: 'ajaw_ai', name: 'AJAW AI' },
     });
-    const service = new InstagramBusinessLoginService(configService({ INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: true }), axelor, oauth);
+    const service = new InstagramBusinessLoginService(configService({ INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: true }), axelor, oauth, activationMock());
 
     await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toMatchObject({
       instagramUserId: '17841410077817456',
@@ -121,7 +125,7 @@ describe('InstagramBusinessLoginService', () => {
     const oauth = oauthMock({
       longLived: { ok: false, error: { status: 400, message: 'redacted oauth failure' } },
     });
-    const service = new InstagramBusinessLoginService(configService({ INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: true }), axelor, oauth);
+    const service = new InstagramBusinessLoginService(configService({ INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: true }), axelor, oauth, activationMock());
 
     await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toMatchObject({
       status: 'connected',
@@ -136,7 +140,7 @@ describe('InstagramBusinessLoginService', () => {
   it('returns unconnected and marks Agent as not processed when n8n cannot activate the bot', async () => {
     mockBotCreatorResponse({ status: 404, body: { error: 'The AI text agent does not exist or is not of type text.' } });
     const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
-    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock());
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock(), activationMock());
 
     await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toMatchObject({
       status: 'unconnected',
@@ -148,10 +152,27 @@ describe('InstagramBusinessLoginService', () => {
     expect(axelor.updateAgentProcessed).toHaveBeenCalledWith(7, 25, false);
   });
 
+  it('returns unconnected and skips n8n when Chatwoot activation cannot create the inbox', async () => {
+    const botCreatorFetch = mockBotCreatorResponse({ status: 200, body: { success: true, message: 'your account was activated' } });
+    const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
+    const activation = activationMock({ status: IntegrationStatus.Failed, reason: 'Chatwoot profile response is missing account_id' });
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock(), activation);
+
+    await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toMatchObject({
+      status: 'unconnected',
+      username: 'test_user',
+      name: 'Test User',
+    });
+
+    expect(activation.execute).toHaveBeenCalledWith({ agentId: 7 });
+    expect(botCreatorFetch).not.toHaveBeenCalled();
+    expect(axelor.updateAgentProcessed).toHaveBeenCalledWith(7, 25, false);
+  });
+
   it('marks the linked Agent as not processed when the callback cannot connect Instagram', async () => {
     const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123', agent: { id: 7 } } });
     const oauth = oauthMock({ profileError: new Error('Meta profile lookup failed') });
-    const service = new InstagramBusinessLoginService(configService(), axelor, oauth);
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauth, activationMock());
 
     await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).rejects.toThrow('Meta profile lookup failed');
 
@@ -163,7 +184,7 @@ describe('InstagramBusinessLoginService', () => {
   it('rejects invalid or replayed state before token exchange or account update', async () => {
     const axelor = axelorMock({ stateAccount: null });
     const oauth = oauthMock();
-    const service = new InstagramBusinessLoginService(configService(), axelor, oauth);
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauth, activationMock());
 
     await expect(service.completeCallback({ code: 'code-123', state: 'replayed-state' })).rejects.toMatchObject({ status: 'unauthorized' });
     expect(oauth.exchangeCodeForShortLivedToken).not.toHaveBeenCalled();
@@ -215,6 +236,12 @@ function configService(overrides: Partial<EnvironmentConfig> = {}): ConfigServic
   return {
     get: (key: keyof EnvironmentConfig) => values[key],
   } as unknown as ConfigService<EnvironmentConfig, true>;
+}
+
+function activationMock(overrides: Partial<{ status: IntegrationStatus; reason: string }> = {}) {
+  return {
+    execute: jest.fn().mockResolvedValue({ status: overrides.status ?? IntegrationStatus.Active, agentId: 7, instagramAccountId: 11, reason: overrides.reason }),
+  } as unknown as jest.Mocked<ActivateInstagramIntegrationService>;
 }
 
 interface AxelorMockOptions {
