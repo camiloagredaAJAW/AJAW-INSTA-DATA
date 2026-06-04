@@ -14,7 +14,7 @@ export interface InstagramCallbackRequest {
 }
 
 export interface InstagramCallbackResult {
-  status: 'connected';
+  status: 'connected' | 'unconnected';
   instagramAccountId: string | number;
   instagramUserId: string;
   name?: string;

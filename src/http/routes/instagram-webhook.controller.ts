@@ -1,9 +1,8 @@
-import { BadRequestException, Controller, Get, Headers, HttpCode, Logger, Query, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Headers, HttpCode, Logger, Query, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { InstagramBusinessLoginError, InstagramBusinessLoginService } from '../../application/instagramBusinessLogin';
-import { InstagramCallbackResult } from '../../application/ports/instagram-login.port';
 import { InstagramWebhookRoutingService } from '../../application/instagramWebhookRouting';
 import { InstagramWebhookRouteResult } from '../../application/ports/instagram-webhook.port';
 import { EnvironmentConfig } from '../../config/environment';
@@ -27,10 +26,12 @@ export class InstagramWebhookController {
     @Query('hub.challenge') challenge: string | undefined,
     @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,
-  ): Promise<string | InstagramCallbackResult> {
+    @Res() response: Response,
+  ): Promise<void> {
     if (challenge !== undefined) {
       this.logger.log('Instagram webhook verification GET received');
-      return this.verify(mode, verifyToken, challenge);
+      response.status(200).send(this.verify(mode, verifyToken, challenge));
+      return;
     }
 
     if (code !== undefined && state !== undefined) {
@@ -40,7 +41,8 @@ export class InstagramWebhookController {
         this.logger.log(
           `Instagram OAuth callback completed: instagramAccountId=${result.instagramAccountId} instagramUserId=${result.instagramUserId} tokenSource=${result.tokenSource}`,
         );
-        return result;
+        response.redirect(this.buildConnectedRedirectUrl(result.status, result.username, result.name));
+        return;
       } catch (error) {
         if (error instanceof InstagramBusinessLoginError) {
           if (error.status === 'unauthorized') {
@@ -55,6 +57,30 @@ export class InstagramWebhookController {
     }
 
     throw new BadRequestException('Invalid Instagram webhook GET request');
+  }
+
+  private buildConnectedRedirectUrl(status: 'connected' | 'unconnected', username?: string, name?: string): string {
+    const baseUrl = this.getConnectedRedirectBaseUrl();
+    const url = new URL('/instagram/connected', baseUrl);
+    url.searchParams.set('status', status);
+    url.searchParams.set('username', username ?? '');
+    url.searchParams.set('name', name ?? '');
+    return url.toString();
+  }
+
+  private getConnectedRedirectBaseUrl(): string {
+    const configured = this.configService.get('INSTAGRAM_CONNECTED_REDIRECT_BASE_URL', { infer: true });
+    if (configured) {
+      return configured;
+    }
+
+    const axelorBaseUrl = this.configService.get('AXELOR_BASE_URL', { infer: true });
+    const parsed = new URL(axelorBaseUrl);
+    if (parsed.hostname === 'data.ajawmrp.com') {
+      return 'https://data.ajaw.ai';
+    }
+
+    return axelorBaseUrl;
   }
 
   private verify(mode: string | undefined, verifyToken: string | undefined, challenge: string | undefined): string {

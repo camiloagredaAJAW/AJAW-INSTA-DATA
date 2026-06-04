@@ -21,6 +21,8 @@ describe('InstagramWebhookController', () => {
         status: 'connected',
         instagramAccountId: 11,
         instagramUserId: '17841400000000000',
+        username: 'ajaw_ai',
+        name: 'AJAW AI',
         tokenSource: 'short_lived',
         longLivedTokenExchange: { attempted: false, succeeded: false },
       }),
@@ -110,18 +112,53 @@ describe('InstagramWebhookController', () => {
       .expect(401);
   });
 
-  it('routes OAuth callback GET requests through the login service without running verification', async () => {
+  it('redirects OAuth callback GET requests to the friendly Instagram connection page', async () => {
     await request(app.getHttpServer())
       .get('/integrations/instagram/webhook')
       .query({ code: 'code-123', state: 'state-123' })
-      .expect(200)
-      .expect(({ body }) => {
-        expect(body).toMatchObject({ status: 'connected', instagramAccountId: 11, tokenSource: 'short_lived' });
-        expect(JSON.stringify(body)).not.toContain('token-secret');
-      });
+      .expect(302)
+      .expect('Location', 'https://axelor.test/instagram/connected?status=connected&username=ajaw_ai&name=AJAW+AI');
 
     expect(loginService.completeCallback).toHaveBeenCalledWith({ code: 'code-123', state: 'state-123' });
     expect(routingService.route).not.toHaveBeenCalled();
+  });
+
+  it('redirects unconnected OAuth callbacks with the final status', async () => {
+    loginService.completeCallback.mockResolvedValueOnce({ status: 'unconnected', instagramAccountId: 11, instagramUserId: '17841400000000000', username: 'ajaw_ai', name: 'AJAW AI' });
+
+    await request(app.getHttpServer())
+      .get('/integrations/instagram/webhook')
+      .query({ code: 'code-123', state: 'state-123' })
+      .expect(302)
+      .expect('Location', 'https://axelor.test/instagram/connected?status=unconnected&username=ajaw_ai&name=AJAW+AI');
+  });
+
+  it('maps the AJAWMRP Axelor base URL to the public friendly redirect host', async () => {
+    await app.close();
+    process.env.AXELOR_BASE_URL = 'https://data.ajawmrp.com';
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          isGlobal: true,
+          validate: validateEnvironment,
+        }),
+      ],
+      controllers: [InstagramWebhookController],
+      providers: [
+        { provide: InstagramBusinessLoginService, useValue: loginService },
+        { provide: InstagramWebhookRoutingService, useValue: routingService },
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication({ rawBody: true });
+    await app.init();
+
+    await request(app.getHttpServer())
+      .get('/integrations/instagram/webhook')
+      .query({ code: 'code-123', state: 'state-123' })
+      .expect(302)
+      .expect('Location', 'https://data.ajaw.ai/instagram/connected?status=connected&username=ajaw_ai&name=AJAW+AI');
   });
 
   it('rejects invalid GET requests that are neither verification nor OAuth callback', async () => {

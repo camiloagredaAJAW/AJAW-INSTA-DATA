@@ -12,6 +12,8 @@ describe('environment validation', () => {
     expect(config.META_APP_SECRET).toBe('test-meta-app-secret');
     expect(config.META_WEBHOOK_VERIFY_TOKEN).toBe('test-webhook-verify-token');
     expect(config.INSTAGRAM_OAUTH_REDIRECT_URI).toBe('https://app.test/integrations/instagram/webhook');
+    expect(config.INSTAGRAM_CONNECTED_REDIRECT_BASE_URL).toBeUndefined();
+    expect(config.N8N_INSTAGRAM_BOT_CREATOR_WEBHOOK_URL).toBeUndefined();
     expect(config.INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE).toBe(false);
     expect(config.LOG_LEVEL).toBe('info');
   });

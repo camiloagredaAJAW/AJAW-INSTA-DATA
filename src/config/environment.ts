@@ -17,7 +17,9 @@ export interface EnvironmentConfig {
   META_APP_SECRET?: string;
   META_WEBHOOK_VERIFY_TOKEN?: string;
   INSTAGRAM_OAUTH_REDIRECT_URI?: string;
+  INSTAGRAM_CONNECTED_REDIRECT_BASE_URL?: string;
   INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: boolean;
+  N8N_INSTAGRAM_BOT_CREATOR_WEBHOOK_URL?: string;
   INSTAGRAM_BUSINESS_ACCOUNT_ID?: string;
   INSTAGRAM_ACCESS_TOKEN?: string;
   AJAW_NAMESPACE: string;
@@ -50,7 +52,9 @@ const environmentSchema = Joi.object<EnvironmentConfig>({
     otherwise: Joi.string().allow('').optional(),
   }),
   INSTAGRAM_OAUTH_REDIRECT_URI: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
+  INSTAGRAM_CONNECTED_REDIRECT_BASE_URL: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
   INSTAGRAM_ENABLE_LONG_LIVED_TOKEN_EXCHANGE: Joi.boolean().truthy('true').falsy('false').default(false),
+  N8N_INSTAGRAM_BOT_CREATOR_WEBHOOK_URL: Joi.string().uri({ scheme: ['http', 'https'] }).allow('').optional(),
   INSTAGRAM_BUSINESS_ACCOUNT_ID: Joi.string().allow('').optional(),
   INSTAGRAM_ACCESS_TOKEN: Joi.string().allow('').optional(),
   AJAW_NAMESPACE: Joi.string().min(1).required(),

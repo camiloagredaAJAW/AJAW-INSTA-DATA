@@ -20,6 +20,7 @@ import { normalizeAgentId } from './activateInstagramIntegration';
 
 const INSTAGRAM_AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
 const INSTAGRAM_BUSINESS_SCOPES = ['instagram_business_basic', 'instagram_business_manage_messages', 'instagram_business_manage_comments'];
+const DEFAULT_N8N_INSTAGRAM_BOT_CREATOR_WEBHOOK_URL = 'https://n8n.ajaw.ai/webhook/instagram-bot-creator';
 
 export class InstagramBusinessLoginError extends Error {
   constructor(
@@ -97,10 +98,13 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
         }),
       );
 
-      await this.updateLinkedAgentProcessed(instagramAccount, true);
+      const botCreatorResult = await this.requestInstagramBotCreator(instagramAccount.agent?.id);
+      const status = botCreatorResult.connected ? 'connected' : 'unconnected';
+
+      await this.updateLinkedAgentProcessed(instagramAccount, botCreatorResult.connected);
 
       return {
-        status: 'connected',
+        status,
         instagramAccountId: instagramAccount.id,
         instagramUserId: profile.userId,
         name: profile.name,
@@ -138,6 +142,32 @@ export class InstagramBusinessLoginService implements InstagramBusinessLoginUseC
     }
 
     await this.axelorClient.updateAgentProcessed(agentId, agent.version, processed);
+  }
+
+  private async requestInstagramBotCreator(agentId: string | number | undefined): Promise<{ connected: boolean }> {
+    if (agentId === undefined || agentId === null) {
+      return { connected: false };
+    }
+
+    const webhookUrl = this.configService.get('N8N_INSTAGRAM_BOT_CREATOR_WEBHOOK_URL', { infer: true }) || DEFAULT_N8N_INSTAGRAM_BOT_CREATOR_WEBHOOK_URL;
+    const url = new URL(webhookUrl);
+    url.searchParams.set('agentId', String(agentId));
+
+    try {
+      const response = await fetch(url.toString(), { method: 'POST', body: '' });
+      if (response.status === 404) {
+        return { connected: false };
+      }
+
+      if (!response.ok) {
+        return { connected: false };
+      }
+
+      const body = (await response.json()) as { success?: unknown };
+      return { connected: body.success === true };
+    } catch {
+      return { connected: false };
+    }
   }
 
   private buildAuthorizeUrl(state: string): string {

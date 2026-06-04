@@ -5,6 +5,10 @@ import { DefaultAxelorClient } from '../src/infrastructure/axelor/axelor.client'
 import { InstagramOAuthClient } from '../src/infrastructure/meta/instagram-oauth.client';
 
 describe('InstagramBusinessLoginService', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('logs into Axelor, stores fresh state on an existing account, and builds the Meta authorize URL', async () => {
     const axelor = axelorMock({
       agent: { id: 7 },
@@ -49,6 +53,7 @@ describe('InstagramBusinessLoginService', () => {
   });
 
   it('completes a valid callback, clears state, and persists connected account fields', async () => {
+    const botCreatorFetch = mockBotCreatorResponse({ status: 200, body: { success: true, message: 'your account was activated' } });
     const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
     const oauth = oauthMock({
       shortLived: { accessToken: 'short-token-secret', userId: '35972463999033656' },
@@ -82,10 +87,12 @@ describe('InstagramBusinessLoginService', () => {
     );
     expect(axelor.fetchAgent).toHaveBeenCalledWith(7);
     expect(axelor.updateAgentProcessed).toHaveBeenCalledWith(7, 25, true);
+    expect(botCreatorFetch).toHaveBeenCalledWith('https://n8n.ajaw.ai/webhook/instagram-bot-creator?agentId=7', { method: 'POST', body: '' });
     expect(oauth.fetchProfile).toHaveBeenCalledWith('short-token-secret');
   });
 
   it('uses the long-lived token for profile lookup and persists the webhook-matching user_id', async () => {
+    mockBotCreatorResponse({ status: 200, body: { success: true, message: 'your account was activated' } });
     const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
     const oauth = oauthMock({
       shortLived: { accessToken: 'short-token-secret', userId: '35972463999033656' },
@@ -109,6 +116,7 @@ describe('InstagramBusinessLoginService', () => {
   });
 
   it('keeps short-lived callback success when long-lived exchange fails and returns only safe metadata', async () => {
+    mockBotCreatorResponse({ status: 200, body: { success: true, message: 'your account was activated' } });
     const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
     const oauth = oauthMock({
       longLived: { ok: false, error: { status: 400, message: 'redacted oauth failure' } },
@@ -123,6 +131,21 @@ describe('InstagramBusinessLoginService', () => {
 
     expect(oauth.fetchProfile).toHaveBeenCalledWith('short-token-secret');
     expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(11, 4, expect.objectContaining({ accessToken: 'short-token-secret' }));
+  });
+
+  it('returns unconnected and marks Agent as not processed when n8n cannot activate the bot', async () => {
+    mockBotCreatorResponse({ status: 404, body: { error: 'The AI text agent does not exist or is not of type text.' } });
+    const axelor = axelorMock({ stateAccount: { id: 11, version: 4, instagramState: 'state-123' } });
+    const service = new InstagramBusinessLoginService(configService(), axelor, oauthMock());
+
+    await expect(service.completeCallback({ code: 'code-123', state: 'state-123' })).resolves.toMatchObject({
+      status: 'unconnected',
+      username: 'test_user',
+      name: 'Test User',
+    });
+
+    expect(axelor.updateInstagramAccount).toHaveBeenCalledWith(11, 4, expect.objectContaining({ active: true }));
+    expect(axelor.updateAgentProcessed).toHaveBeenCalledWith(7, 25, false);
   });
 
   it('marks the linked Agent as not processed when the callback cannot connect Instagram', async () => {
@@ -205,4 +228,14 @@ interface OAuthMockOptions {
   longLived?: { ok: true; token: { accessToken: string; expiresIn?: number } } | { ok: false; error: { status?: number; message: string } };
   profile?: { userId: string; username?: string; name?: string };
   profileError?: Error;
+}
+
+function mockBotCreatorResponse({ status, body }: { status: number; body: Record<string, unknown> }): jest.Mock {
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  });
+  jest.spyOn(global, 'fetch').mockImplementation(fetchMock);
+  return fetchMock;
 }
