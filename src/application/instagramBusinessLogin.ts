@@ -20,13 +20,7 @@ import {
 import { ActivateInstagramIntegrationService, normalizeAgentId } from './activateInstagramIntegration';
 
 const INSTAGRAM_AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
-const INSTAGRAM_BUSINESS_SCOPES = [
-  'instagram_business_basic',
-  'instagram_business_manage_messages',
-  'instagram_business_manage_comments',
-  'instagram_manage_comments',
-  'instagram_basic',
-];
+const INSTAGRAM_BUSINESS_SCOPES = ['instagram_business_basic', 'instagram_business_manage_messages', 'instagram_business_manage_comments'];
 const DEFAULT_N8N_INSTAGRAM_BOT_CREATOR_WEBHOOK_URL = 'https://n8n.ajaw.ai/webhook/instagram-bot-creator';
 
 export class InstagramBusinessLoginError extends Error {

@@ -87,7 +87,7 @@ Configure the webhook from <https://developers.facebook.com/> for the same app t
 2. Use the callback URL exposed by this service: `https://<public-host>/integrations/instagram/webhook`.
 3. Enter the exact verify token stored in `META_WEBHOOK_VERIFY_TOKEN`; Meta calls the GET challenge flow and the service returns `hub.challenge` only when the token matches.
 4. Keep `META_APP_SECRET` configured in the runtime environment before enabling POST delivery. Incoming webhook POST requests are rejected unless `X-Hub-Signature-256` validates against the raw request body.
-5. Subscribe the Instagram object/events needed for messages and comments, and ensure the connected account has the required scopes: `instagram_business_basic`, `instagram_business_manage_messages`, `instagram_business_manage_comments`, `instagram_manage_comments`, and `instagram_basic`.
+5. Subscribe the Instagram object/events needed for messages and comments, and ensure the connected account has the required scopes: `instagram_business_basic`, `instagram_business_manage_messages`, and `instagram_manage_comments`.
 
 The webhook router resolves the target `InstagramAccount` by `instagramUserId`, then uses its existing Chatwoot API Channel linkage (`chatwootAccountId`, `chatwootInboxId`, and `Agent.chatwootApiKey`) to create or reuse Chatwoot contacts, contact inboxes, conversations, and messages. Instagram DMs append to the same non-resolved Chatwoot conversation for the same contact and inbox. Instagram comments remain independent Chatwoot conversations; the original publication id or URL is preserved in Chatwoot `custom_attributes` and in the visible first message context.
 

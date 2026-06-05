@@ -31,9 +31,7 @@ describe('InstagramBusinessLoginService', () => {
     expect(authorizeUrl.searchParams.get('redirect_uri')).toBe('https://app.test/integrations/instagram/webhook');
     expect(authorizeUrl.searchParams.get('response_type')).toBe('code');
     expect(authorizeUrl.searchParams.get('state')).toBe(result.state);
-    expect(authorizeUrl.searchParams.get('scope')).toBe(
-      'instagram_business_basic instagram_business_manage_messages instagram_business_manage_comments instagram_manage_comments instagram_basic',
-    );
+    expect(authorizeUrl.searchParams.get('scope')).toBe('instagram_business_basic instagram_business_manage_messages instagram_business_manage_comments');
   });
 
   it('creates an OAuth placeholder account when the Agent exists but has no InstagramAccount yet', async () => {
